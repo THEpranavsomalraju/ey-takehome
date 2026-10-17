@@ -111,6 +111,18 @@ def main() -> int:
             results,
         )
         _run("explain", [py, "-m", "ledgerclf", "explain", holdout, "--row", "1"], outside, results)
+        smoke = (
+            "from fastapi.testclient import TestClient;"
+            "from ledgerclf.server import create_app;"
+            "from ledgerclf.service import PredictionService;"
+            "c = TestClient(create_app(PredictionService.load(auto_train=False)));"
+            "assert '<div id=\"root\">' in c.get('/').text;"
+            "u = c.post('/api/predict/sample').json();"
+            "assert u['summary']['rows'] == 590;"
+            "assert c.get(f\"/api/explain/{u['upload_id']}/1\").json()['row_number'] == 1;"
+            "assert c.get('/api/reports/holdout/holdout_evaluation.json').status_code == 200"
+        )
+        _run("dashboard and API served", [py, "-c", smoke], outside, results)
         golden = [py, "tools/compare_golden.py", "--tolerance", "cross-platform"]
         _run("golden comparison", golden, project, results)
         _run("install requirements-dev.txt", [*pip, "-r", "requirements-dev.txt"], project, results)
