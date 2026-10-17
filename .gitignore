@@ -1,0 +1,37 @@
+# Environments
+.venv/
+venv/
+env/
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Build and research output
+dist/
+build/
+*.egg-info/
+catboost_info/
+
+# Secrets: never committed, never packaged
+.env
+.env.*
+
+# Frontend tooling
+node_modules/
+.vercel/
+
+# OS noise
+.DS_Store
+Thumbs.db

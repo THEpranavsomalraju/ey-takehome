@@ -1,0 +1,2 @@
+# Optional research extras. Not needed to run the application.
+catboost==1.2.10
