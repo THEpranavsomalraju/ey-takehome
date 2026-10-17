@@ -4,8 +4,8 @@ Every factory returns an unfitted estimator that takes the coerced frame
 (``schema.coerce_values`` output) and contains its own feature pipeline, so
 cross-validation refits every transformer on each training fold.
 
-LightGBM is imported only inside functions (CLAUDE.md rule 10), so importing
-this module works on machines where LightGBM fails to load.
+LightGBM is imported only inside functions, so importing this module works on
+machines where LightGBM fails to load and the fallback model still loads.
 """
 
 from __future__ import annotations
@@ -91,7 +91,7 @@ class PoweredClassWeight(BaseEstimator, ClassifierMixin):
     """Wrap a classifier and set ``class_weight`` from the labels of each fit.
 
     Computing the weights inside ``fit`` means every CV fold weights classes
-    by its own training labels (docs/04 section 5).
+    by its own training labels.
 
     Args:
         estimator: A classifier with a ``class_weight`` parameter.
@@ -158,7 +158,7 @@ def softmax(logits: np.ndarray) -> np.ndarray:
 
 @dataclass(frozen=True)
 class Contributions:
-    """Exact additive decomposition of blended logits (docs/04 section 6.2).
+    """Exact additive decomposition of blended logits.
 
     ``values[i, k, j]`` is feature j's contribution to class k's logit for row
     i, and ``bias[i, k]`` the intercept part, so that
@@ -171,7 +171,7 @@ class Contributions:
 
 
 class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
-    """Blend a linear model and LightGBM in logit space (finishing item C).
+    """Blend a linear model and LightGBM in logit space.
 
     ``z = (w * z_linear + (1 - w) * z_tree) / T`` and ``p = softmax(z)``.
     Averaging logits instead of probabilities keeps every prediction an exact

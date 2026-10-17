@@ -1,4 +1,4 @@
-"""Environment and artifact diagnostics (docs/05 section 10).
+"""Environment and artifact diagnostics.
 
 Every check returns PASS, WARN, or FAIL with a plain-English fix. The same
 checks back ``python -m ledgerclf doctor`` and ``PredictionService.health()``.
@@ -252,7 +252,7 @@ def _artifacts_unavailable(reason: str) -> ModelChecks:
 
 
 def default_model_checks() -> ModelChecks:
-    """Return the artifact, reference, and self-test checks (docs/05 section 10, 5 6 9).
+    """Return the artifact, reference, and self-test checks.
 
     The artifacts module loads lazily so that the doctor still runs when the
     modeling stack is broken; that state becomes a visible WARN.
@@ -269,7 +269,7 @@ def default_model_checks() -> ModelChecks:
 
 
 def model_checks(settings: Settings) -> list[CheckResult]:
-    """Checks 5, 6, and 9: artifacts load, reference statistics exist, self-test matches.
+    """Model checks: artifacts load, reference statistics exist, self-test matches.
 
     Args:
         settings: Project settings.
@@ -331,7 +331,7 @@ def run_doctor(
 
     Args:
         settings: Project settings.
-        require_model: Treat missing artifacts as a failure (gate from Phase 6).
+        require_model: Treat missing artifacts as a failure (once a model is trained).
         model_checks: Callable producing the artifact, reference, and self-test
             checks; defaults to ``default_model_checks()``. Tests inject fakes.
 

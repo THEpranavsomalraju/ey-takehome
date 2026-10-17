@@ -1,7 +1,7 @@
-"""Final training: fit the champion and the fallback on the training portion (docs/04 section 11).
+"""Final training: fit the champion and the fallback on the training portion only.
 
 ``train`` reads ``artifacts/champion.json`` (written by ``select``), never ad
-hoc arguments, so the trained model always matches the documented decision.
+hoc arguments, so the trained model always matches the recorded decision.
 It also writes reference statistics, metadata, the doctor's sample rows, and
 golden predictions on the holdout features (no labels are read).
 """
@@ -102,7 +102,7 @@ def _library_versions() -> dict[str, str]:
 def build_metadata(
     settings: Settings, champion: dict[str, Any], data: TrainingData
 ) -> dict[str, Any]:
-    """Return metadata.json content (docs/02 section 6)."""
+    """Return metadata.json content."""
     split = load_split(settings.paths)
     return {
         "schema_version": "1.0",
@@ -177,10 +177,10 @@ def run_training(settings: Settings) -> dict[str, Any]:
         logger.info("trained %s (%s)", name, config["name"])
     artifacts = settings.paths.artifacts
     (artifacts / METADATA_FILE).write_text(
-        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
     )
     (artifacts / REFERENCE_FILE).write_text(
-        json.dumps(reference.to_dict(), sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(reference.to_dict(), sort_keys=True) + "\n", encoding="utf-8", newline="\n"
     )
     _write_samples(settings, data, bundles)
     _write_golden(settings, bundles)

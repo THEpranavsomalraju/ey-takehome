@@ -1,7 +1,7 @@
 """Label normalization: eleven raw spellings collapse to six canonical classes.
 
 The same function serves training (every label must map) and uploads
-(unmapped labels exclude the row from scoring only). See DECISIONS.md D01.
+(unmapped labels exclude the row from scoring only).
 """
 
 from __future__ import annotations
@@ -63,7 +63,8 @@ def normalize_labels(values: pd.Series) -> tuple[pd.Series, pd.DataFrame]:
         unmapped values, mapping table with columns ``raw_label``,
         ``canonical_label``, ``rows`` sorted by canonical then raw label).
     """
-    canonical = values.map(normalize_label).astype(object)
+    # A list keeps None for unmapped labels under pandas 2 and 3 (map() gives NaN on pandas 3).
+    canonical = pd.Series([normalize_label(v) for v in values], index=values.index, dtype=object)
     raw_text = values.map(lambda v: "" if v is None or pd.isna(v) else str(v))
     table = (
         pd.DataFrame({"raw_label": raw_text, "canonical_label": canonical.fillna("")})

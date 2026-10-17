@@ -1,4 +1,4 @@
-"""Edge cases E01 to E12 (docs/05 section 4, environment level)."""
+"""Edge cases E01 to E12 (environment level)."""
 
 from __future__ import annotations
 

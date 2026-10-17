@@ -1,4 +1,4 @@
-"""Training reference statistics: what the model has seen (docs/02 section 4, docs/04 section 12).
+"""Training reference statistics: what the model has seen.
 
 Built from training rows only (or from the training rows of one CV fold for
 out-of-fold flag analysis). Flags compare uploads against these statistics,

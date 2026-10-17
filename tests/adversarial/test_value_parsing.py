@@ -19,7 +19,7 @@ def _csv_column(tmp_path, column: int, values: list[str]):
 
 def test_invalid_date_does_not_flip_other_rows_to_day_first(tmp_path):
     frame, issues = _csv_column(tmp_path, PERIOD, ["08/09/2018", "45/08/2018"])
-    # 45 is no valid day, so it is no evidence of day-first order (docs/05 2.5 Col5).
+    # 45 is no valid day, so it is no evidence of day-first order.
     flip_reported = any(i.code.startswith("DATE_ORDER") for i in issues)
     assert frame.loc[0, "Col5"] == "2018-08" or flip_reported, (
         "08/09/2018 silently became September because of one typo row"
@@ -46,7 +46,7 @@ def test_invisible_characters_in_amount_and_date_are_ignored(tmp_path, mark):
     row = with_value(with_value(ROW_A, AMOUNT, "1200" + mark), PERIOD, mark + "2018-08-31")
     path = tmp_path / "invisible.csv"
     path.write_text(csv_text([row]), encoding="utf-8")
-    frame, _ = run_path(path, path.name)  # docs/05 V04: same result as the clean value
+    frame, _ = run_path(path, path.name)  # edge case V04: same result as the clean value
     assert frame.loc[0, "amount"] == 1200.0
     assert frame.loc[0, "Col5"] == "2018-08"
 

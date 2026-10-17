@@ -1,4 +1,4 @@
-"""read_table with path sources that cannot be read must raise FileReadError (principle 3)."""
+"""read_table with path sources that cannot be read must raise FileReadError, not OSError."""
 
 from __future__ import annotations
 

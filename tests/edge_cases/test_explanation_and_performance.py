@@ -28,7 +28,7 @@ PAYLOAD_KEYS = {
     "context",
     "fallback_text",
 }
-# Test limits are three times the docs/05 section 9 budgets, to avoid flaky failures.
+# Test limits are three times the performance budgets, to avoid flaky failures.
 SLACK = 3
 
 

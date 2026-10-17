@@ -1,34 +1,34 @@
 row_id,column,raw_value,cleaned_value,model_input
 0,Col1,Word1 Word2 Word3 Word4 Word5,Word1 Word2 Word3 Word4 Word5,word1 word2 word3 word4 word5
-0,Col2,44912133,44912133,not used by the model (D04)
+0,Col2,44912133,44912133,not used by the model (IDs would be memorized)
 0,Col3,3575,3575.00,"signed_log=8.1820, is_negative=0, is_round=0"
 0,Col4,Word771 Word772,Word771 Word772,word771 word772
 0,Col5,2018-08-31 00:00:00,2018-08,"period index 24224 (2018-08), clipped to training range"
 0,Col6,Word560 Word561 Word366 Word562,Word560 Word561 Word366 Word562,word560 word561 word366 word562
 0,Col7,Doc1,Doc1,doc1
 1477,Col1,Word85 Word86 Word87 Word5 Word88 Word16 Word17 Word3 Word7,Word85 Word86 Word87 Word5 Word88 Word16 Word17 Word3 Word7,word85 word86 word87 word5 word88 word16 word17 word3 word7
-1477,Col2,64765,64765,not used by the model (D04)
+1477,Col2,64765,64765,not used by the model (IDs would be memorized)
 1477,Col3,105,105.00,"signed_log=4.6634, is_negative=0, is_round=0"
 1477,Col4,Word944 Word945,Word944 Word945,word944 word945
 1477,Col5,2017-12-01 00:00:00,2017-12,"period index 24216 (2017-12), clipped to training range"
 1477,Col6,Word563 Word580 Word581 Word232,Word563 Word580 Word581 Word232,word563 word580 word581 word232
 1477,Col7,NoDoc,NoDoc,nodoc
 2949,Col1,Word48 Word3 Word4 Word5,Word48 Word3 Word4 Word5,word48 word3 word4 word5
-2949,Col2,FS20174579,FS20174579,not used by the model (D04)
+2949,Col2,FS20174579,FS20174579,not used by the model (IDs would be memorized)
 2949,Col3,630,630.00,"signed_log=6.4473, is_negative=0, is_round=1"
 2949,Col4,Word780 Word877,Word780 Word877,word780 word877
 2949,Col5,2018-02-01 00:00:00,2018-02,"period index 24218 (2018-02), clipped to training range"
 2949,Col6,Word563 Word564 Word9 Word26,Word563 Word564 Word9 Word26,word563 word564 word9 word26
 2949,Col7,NoDoc,NoDoc,nodoc
 4417,Col1,Word160 Word161 Word61 Word45 Word39,Word160 Word161 Word61 Word45 Word39,word160 word161 word61 word45 word39
-4417,Col2,1159-3,1159-3,not used by the model (D04)
+4417,Col2,1159-3,1159-3,not used by the model (IDs would be memorized)
 4417,Col3,50,50.00,"signed_log=3.9318, is_negative=0, is_round=1"
 4417,Col4,Word61,Word61,word61
 4417,Col5,2018-10-31 00:00:00,2018-10,"period index 24226 (2018-10), clipped to training range"
 4417,Col6,Word563 Word564 Word9 Word26,Word563 Word564 Word9 Word26,word563 word564 word9 word26
 4417,Col7,NoDoc,NoDoc,nodoc
 5898,Col1,Word40 Word41 Word4 Word5,Word40 Word41 Word4 Word5,word40 word41 word4 word5
-5898,Col2,1868,1868,not used by the model (D04)
+5898,Col2,1868,1868,not used by the model (IDs would be memorized)
 5898,Col3,1820,1820.00,"signed_log=7.5071, is_negative=0, is_round=1"
 5898,Col4,Word802 Word278 Word1242 Word803,Word802 Word278 Word1242 Word803,word802 word278 word1242 word803
 5898,Col5,2018-07-31 00:00:00,2018-07,"period index 24223 (2018-07), clipped to training range"

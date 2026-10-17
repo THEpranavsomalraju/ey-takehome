@@ -1,7 +1,7 @@
 """Benchmark command: leaderboard, ablations, class weight dial, leaf size, validation schemes.
 
-Every run uses the training portion only, grouped CV with the documented
-group key, and the model factories in ``models.py`` (docs/04 section 4).
+Every run uses the training portion only, grouped CV with the group key
+from ``splitting.py``, and the model factories in ``models.py``.
 ``quick`` mode cuts seeds and variants for development; final reports come
 from a full run.
 """
@@ -70,7 +70,7 @@ def plan_for(settings: Settings, quick: bool) -> BenchmarkPlan:
 
 
 def model_zoo(settings: Settings) -> dict[str, Any]:
-    """Return every leaderboard model (docs/04 section 4), unfitted."""
+    """Return every leaderboard model, unfitted."""
     seed = settings.random_state
     linear0 = replace(settings.linear, class_weight_power=0.0)
     linear05 = replace(settings.linear, class_weight_power=0.5)
@@ -233,7 +233,7 @@ def run_class_weight_dial(
 
 
 def run_leaf_size(settings: Settings, data: TrainingData, plan: BenchmarkPlan) -> pd.DataFrame:
-    """Score LightGBM across minimum leaf sizes (rare classes need tiny leaves, D12)."""
+    """Score LightGBM across minimum leaf sizes (rare classes need tiny leaves)."""
     splits = grouped_splits(data.y, data.groups, plan.seeds, settings.cv_folds)
     rows = []
     for size in plan.leaf_sizes:
@@ -264,8 +264,8 @@ def run_validation_schemes(
     models = {
         "logistic_p0": make_logistic(linear0),
         "logodds_blend_p0": make_blend(linear0, tree0, settings.blend, settings.random_state),
-        # Balanced weights reproduce the exploration configuration behind the docs/01
-        # unseen-vendor reference (Exp 7), so the reference check compares like with like.
+        # Balanced weights reproduce the exploration configuration behind the unseen-vendor
+        # reference accuracy, so the reference check compares like with like.
         "logistic_p1": make_logistic(replace(settings.linear, class_weight_power=1.0)),
     }
     seed = settings.seeds[0]

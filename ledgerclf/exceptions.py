@@ -1,4 +1,4 @@
-"""Exception hierarchy for user-facing failures (docs/02 section 10).
+"""Exception hierarchy for user-facing failures.
 
 Every message follows the pattern: what happened, why, how to fix it.
 """

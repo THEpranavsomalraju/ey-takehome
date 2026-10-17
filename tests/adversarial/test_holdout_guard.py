@@ -1,8 +1,9 @@
-"""The labeled-holdout guard must not depend on the exact file bytes (CLAUDE.md rule 1).
+"""The labeled-holdout guard must not depend on the exact file bytes.
 
-PredictionService withholds metrics only when the upload's SHA-256 equals
-data/holdout/holdout_with_labels.xlsx. Re-saving the same rows as CSV (or opening
-and saving in Excel) changes the bytes, and the holdout labels get scored.
+Holdout labels are read only by evaluate-holdout. A guard that withheld metrics
+only when the upload's SHA-256 equals data/holdout/holdout_with_labels.xlsx would
+fail on a CSV re-save (or an open-and-save in Excel), which changes the bytes and
+would let the holdout labels be scored.
 
 The test never touches the real holdout labels: it points a service at a temp
 project whose "holdout_with_labels.xlsx" is a synthetic labeled file.

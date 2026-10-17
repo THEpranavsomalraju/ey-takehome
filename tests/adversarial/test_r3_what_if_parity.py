@@ -1,10 +1,10 @@
 """The what_if tool must score a changed cell exactly as an upload with that cell would.
 
-docs/05 section 1 principle 5: every source passes through ``schema.coerce_values``;
-V04 (extra spaces give the same prediction), V15 (``doc1`` canonicalizes),
-section 2.5 (``N/A`` is a missing marker). ``agent_tools.what_if`` writes the
-raw text straight into the coerced frame, so the agent quotes probabilities
-that differ from what re-uploading the edited row returns.
+Every source passes through ``schema.coerce_values``, so V04 (extra spaces give
+the same prediction), V15 (``doc1`` canonicalizes), and ``N/A`` as a missing
+marker apply to what-if edits too. Writing the raw text straight into the
+coerced frame would make the agent quote probabilities that differ from what
+re-uploading the edited row returns.
 """
 
 from __future__ import annotations

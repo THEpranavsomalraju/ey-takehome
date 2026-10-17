@@ -1,8 +1,8 @@
 """A pandas index column (empty header, running 0..n-1) must be ignored, not flagged as ragged rows.
 
 ``DataFrame.to_csv()`` and ``DataFrame.to_excel()`` write the index by default
-with an empty header cell. docs/05 section 2.4 step 3 and S14: drop pandas index
-artifacts. Today every row gets ROW_HAS_EXTRA_FIELDS, the critical flag
+with an empty header cell. Pandas index artifacts are dropped (edge case S14);
+otherwise every row would get ROW_HAS_EXTRA_FIELDS, the critical flag
 ROW_STRUCTURE_SUSPECT, and review_required=True.
 """
 

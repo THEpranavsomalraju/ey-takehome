@@ -1,8 +1,8 @@
-"""A missing champion file falls back to the logistic bundle (docs/02 sections 4 and 6).
+"""A missing champion file falls back to the logistic bundle.
 
-``load_best_available``: "blend, else fallback, logs reason". Today a missing
-champion raises ArtifactError even though model_fallback.joblib loads fine, and
-``PredictionService.load(auto_train=True)`` neither falls back nor retrains.
+``load_best_available``: "blend, else fallback, logs reason". A missing champion
+must not raise ArtifactError while model_fallback.joblib loads fine, and
+``PredictionService.load(auto_train=True)`` must fall back or retrain.
 """
 
 from __future__ import annotations

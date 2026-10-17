@@ -2,7 +2,7 @@
 
 Every source (training file, holdout file, upload) passes through
 ``resolve_columns`` then ``coerce_values``, so training and inference see
-identical cleaning (docs/05 section 1, principle 5).
+identical cleaning.
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ _INDEX_ARTIFACT = re.compile(r"^(unnamed:?\d*|index|)$")
 
 
 class Severity(StrEnum):
-    """Severity of a file-level validation issue (docs/05 section 2.6)."""
+    """Severity of a file-level validation issue."""
 
     ERROR = "ERROR"
     WARNING = "WARNING"

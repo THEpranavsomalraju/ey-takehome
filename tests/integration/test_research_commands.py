@@ -2,7 +2,7 @@
 
 Heavy commands run on a subsample with small budgets in a temporary project
 copy. The holdout evaluation test replaces the holdout labels with synthetic
-ones first, so the real holdout labels are never read (CLAUDE.md rule 1).
+ones first, so the real holdout labels are never read (only evaluate-holdout may).
 """
 
 from __future__ import annotations

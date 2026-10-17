@@ -1,4 +1,4 @@
-"""Feature pipeline: the single source of feature logic (CLAUDE.md rule 4, docs/04 section 3).
+"""Feature pipeline: the single source of feature logic for training and inference.
 
 Every transformer fits inside the pipeline on training folds only, and the
 same fitted pipeline transforms uploads, so training and inference can never
@@ -258,7 +258,7 @@ class PeriodEncoder(BaseEstimator, TransformerMixin):
 
 
 class InvoiceFormatFeatures(BaseEstimator, TransformerMixin):
-    """Col2 format features, used only by the ablation that confirms dropping Col2 (D04)."""
+    """Col2 format features, used only by the ablation that confirms dropping Col2."""
 
     def fit(self, X: Any, y: Any = None) -> InvoiceFormatFeatures:
         """Record the input width; nothing else is learned."""

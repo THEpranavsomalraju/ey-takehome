@@ -3,8 +3,8 @@
 Usage:
     python tools/run_notebooks.py [NOTEBOOK ...]
 
-Fails on the first cell error. Used by gate check 11 and before every commit
-that touches the notebooks.
+Fails on the first cell error. Run it after any change that touches the
+notebooks or the reports they read.
 """
 
 from __future__ import annotations

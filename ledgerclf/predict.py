@@ -1,8 +1,8 @@
 """Predictions for any uploaded file: validation, flags, model, review policy, metrics.
 
-Every non-empty row gets exactly one prediction in original order
-(CLAUDE.md rule 8, docs/05 section 3). Flags mark risk; they never withhold
-a prediction. The same validation path serves training files and uploads.
+Every non-empty row gets exactly one prediction in original order. Flags
+mark risk; they never withhold a prediction. The same validation path serves
+training files and uploads.
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ def predict_file(
         limits: Input limits (defaults from config).
         fallback_reason: Why the fallback model is active, if it is.
         label_screen: Check that keeps some rows' labels unread. Without one, any
-            label column is dropped unread (CLAUDE.md rule 1: fail closed).
+            label column is dropped unread (fail closed: holdout labels stay unread).
 
     Returns:
         The prediction result.
@@ -185,7 +185,7 @@ def predict_frame(
         read_issues: Issues already found while reading.
         fallback_reason: Why the fallback model is active, if it is.
         label_screen: Check that keeps some rows' labels unread. Without one, any
-            label column is dropped unread (CLAUDE.md rule 1: fail closed).
+            label column is dropped unread (fail closed: holdout labels stay unread).
 
     Returns:
         The prediction result.

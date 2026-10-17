@@ -1,8 +1,9 @@
 """Model bundles: save, load with version checks, and the best-available choice.
 
 The champion bundle may contain LightGBM objects; the fallback bundle never
-does (DECISIONS.md D15). ``load_best_available`` loads the champion when
-LightGBM works and the fallback otherwise, and reports which one is active.
+does, so it loads where LightGBM's native library is missing.
+``load_best_available`` loads the champion when LightGBM works and the
+fallback otherwise, and reports which one is active.
 """
 
 from __future__ import annotations

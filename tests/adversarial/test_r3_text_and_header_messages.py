@@ -1,14 +1,14 @@
 """Phantom rows from decoding, and messages that contradict the file.
 
 - A UTF-16 CSV with one stray trailing byte (a truncated copy or an exporter's
-  padding byte) decodes with ``errors="replace"``: the lone byte becomes a
-  U+FFFD row that is predicted as data, with no warning. docs/05 section 3:
-  one prediction per non-empty input row; section 2.3 records lossy decoding
-  with an ENCODING_FALLBACK warning (as the UTF-8 BOM path already does).
+  padding byte) decodes with ``errors="replace"``: the lone byte would become a
+  U+FFFD row predicted as data, with no warning. Every non-empty input row gets
+  one prediction, so a phantom row must not appear, and lossy decoding must
+  raise an ENCODING_FALLBACK warning (as the UTF-8 BOM path does).
 - A header row named exactly Col1 to Col7 below 20 blank lines is outside the
-  scan window (docs/05 section 2.4), so positional mapping applies. The
-  HEADER_NOT_RECOGNIZED warning then claims the names "do not match Col1 to
-  Col7" and tells the user to rename them, which is false and does not help.
+  header scan window, so positional mapping applies. The HEADER_NOT_RECOGNIZED
+  warning must not claim the names "do not match Col1 to Col7" and tell the
+  user to rename them, which would be false and would not help.
 """
 
 from __future__ import annotations

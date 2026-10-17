@@ -1,4 +1,4 @@
-"""Cell-level parsers for text, amounts, and posting periods (docs/05 section 2.5).
+"""Cell-level parsers for text, amounts, and posting periods.
 
 Every parser is a pure function of one cell. Parsers never raise on bad
 values: they return None so that the caller can flag and impute.
@@ -25,7 +25,7 @@ _WHITESPACE = re.compile(r"\s+")
 _CURRENCY = re.compile(r"^(?:usd|eur|gbp|\$|\u20ac|\u00a3)\s*|\s*(?:usd|eur|gbp|\$|\u20ac|\u00a3)$")
 _PLAIN_NUMBER = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$", re.ASCII)
 # European notation only when unambiguous: a decimal comma, or two or more dot groups.
-# "1.234" and "12.500" stay dot-decimal numbers (DECISIONS.md D27).
+# "1.234" and "12.500" stay dot-decimal numbers, so three-decimal values keep magnitude.
 _EUROPEAN = re.compile(r"^\d{1,3}(?:\.\d{3})+,\d+$|^\d{1,3}(?:\.\d{3}){2,}$", re.ASCII)
 _GROUPED = re.compile(r"^\d{1,3}(?P<sep>[,' ])\d{3}(?:(?P=sep)\d{3})*(?:\.\d+)?$", re.ASCII)
 

@@ -1,4 +1,4 @@
-"""Edge cases S01 to S14 (docs/05 section 4, structure level): column resolution."""
+"""Edge cases S01 to S14 (structure level): column resolution."""
 
 from __future__ import annotations
 

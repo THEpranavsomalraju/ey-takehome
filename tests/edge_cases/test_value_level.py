@@ -1,4 +1,4 @@
-"""Edge cases V01 to V20 (docs/05 section 4, value level): coercion.
+"""Edge cases V01 to V20 (value level): coercion.
 
 Prediction-level assertions (flags, review policy) live in
 ``test_prediction_level.py`` and run once trained artifacts exist.

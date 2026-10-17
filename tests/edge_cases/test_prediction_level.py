@@ -1,7 +1,7 @@
-"""Prediction-level assertions for the F, S, V, L, and R families (docs/05 section 4).
+"""Prediction-level assertions for the F, S, V, L, and R edge-case families.
 
 The validation-layer assertions live in the sibling files; these tests run
-the full service so that every catalog expectation about predictions,
+the full service so that every edge-case expectation about predictions,
 flags, review routing, and metrics is checked end to end.
 """
 
@@ -33,7 +33,7 @@ def unseen_rows(holdout_rows) -> pd.DataFrame:
     """Holdout features with new amounts, so they match neither holdout nor training rows.
 
     Labels attached to real holdout rows stay unread before the holdout
-    evaluation (DECISIONS.md D35), so label-handling tests use these rows.
+    evaluation, so label-handling tests use these rows.
     """
     return holdout_rows.assign(Col3=[f"{777000 + i}.13" for i in range(len(holdout_rows))])
 
@@ -79,7 +79,7 @@ def test_f13_raw_file_gives_5899_predictions_and_metric_keys(service, settings):
         settings.paths.raw_data.read_bytes(), settings.paths.raw_data.name
     )
     assert len(result.predictions) == 5899
-    # Structure only: the raw file contains holdout rows (DECISIONS.md D26, D35).
+    # Structure only: the raw file contains holdout rows, whose labels stay unread.
     assert {"accuracy", "macro_f1_5", "labeled_rows"} <= set(result.metrics)
     holdout = len(pd.read_csv(settings.paths.holdout / "holdout_features.csv", dtype=object))
     codes = {i.code for i in result.report.issues}

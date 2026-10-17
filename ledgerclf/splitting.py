@@ -1,9 +1,9 @@
 """Group key, holdout seed rule, persisted holdout split, CV splitters, holdout guard.
 
 The holdout split is computed once by the ``split`` command, written to
-``data/splits``, and only ever re-read afterwards (docs/04 section 2).
+``data/splits``, and only ever re-read afterwards.
 Holdout labels open only through ``read_holdout_labels`` with a token that
-the ``evaluate-holdout`` command alone creates (CLAUDE.md rule 1).
+the ``evaluate-holdout`` command alone creates, so nothing else can read them.
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ HOLDOUT_LABELS_FILE = "holdout_labels.csv"
 HOLDOUT_WITH_LABELS_FILE = "holdout_with_labels.xlsx"
 _GROUP_KEY_SEPARATOR = "\x1f"
 _GUARD_MESSAGE = (
-    "Holdout labels are only available to the evaluate-holdout command. Ask the project "
-    "owner before running: python -m ledgerclf evaluate-holdout --confirm"
+    "Holdout labels are only available to the evaluate-holdout command. It is meant to "
+    "run once: python -m ledgerclf evaluate-holdout --confirm"
 )
 
 
@@ -75,7 +75,8 @@ def build_group_key(frame: pd.DataFrame) -> np.ndarray:
 
     Rows identical on Col1, Col3, Col4, Col5 (monthly period), Col6, and Col7
     share a group, so copies never land on both sides of a split. Col2 stays
-    out because many copies differ only by invoice number (DECISIONS.md D02, D22).
+    out because many copies differ only by invoice number. The period is the
+    month, not the day, because the model sees only the monthly period index.
 
     Args:
         frame: Coerced frame from ``schema.coerce_values``.
@@ -177,7 +178,7 @@ def _rule_accepts(y: np.ndarray, holdout_idx: np.ndarray, rule: HoldoutRule) -> 
 
 
 def select_holdout_seed(y: np.ndarray, groups: np.ndarray, rule: HoldoutRule) -> HoldoutSelection:
-    """Apply the written holdout seed rule (DECISIONS.md D03).
+    """Apply the written holdout seed rule.
 
     The rule depends only on label counts, never on model results.
 
@@ -416,7 +417,9 @@ def _build_manifest(
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def load_split(paths: Paths) -> SplitResult:
@@ -503,9 +506,9 @@ def load_training_frame(settings: Settings) -> TrainingData:
 def load_full_file_structure(settings: Settings) -> tuple[pd.DataFrame, pd.Series]:
     """Return the full raw file for label-free structure reports, plus raw label spellings.
 
-    The only full-file view outside this module (docs/03 Phase 2 step 1,
-    DECISIONS.md D26): the schema audit and Col2 formats are label-free, and
-    the raw label mapping reports spellings and counts only.
+    The only full-file view outside this module: the schema audit and Col2
+    formats are label-free, and the raw label mapping reports spellings and
+    counts only, never metrics or predictions.
 
     Args:
         settings: Project settings.

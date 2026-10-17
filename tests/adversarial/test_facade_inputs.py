@@ -1,8 +1,8 @@
-"""PredictionService.predict_file never lets a raw Python exception escape (docs/05 section 1.3).
+"""PredictionService.predict_file never lets a raw Python exception escape.
 
 A Streamlit ``UploadedFile`` is an ``io.BytesIO`` subclass, so passing it straight
-to the facade is the most likely Part 2 integration mistake. Today these inputs
-raise TypeError or ValueError instead of a LedgerClfError with a fix.
+to the facade is the most likely dashboard integration mistake. Such inputs must
+raise a LedgerClfError with a fix, not a TypeError or ValueError.
 """
 
 from __future__ import annotations

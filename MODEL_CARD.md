@@ -1,84 +1,104 @@
 # Model card: ledger classifier
 
+## Summary
+
+| | |
+|---|---|
+| Task | Suggest one of six categories (`Category_1` to `Category_6`) for each accounts payable invoice line |
+| Model | Blend of logistic regression and LightGBM in log-odds space, temperature-calibrated |
+| Holdout accuracy (590 unseen rows, scored once) | **0.9712** (fallback model: 0.9525) |
+| Expected accuracy on new data (grouped cross-validation) | **0.954 +- 0.007** |
+| Baseline (always the most common category) | 0.884 |
+| Review routing (holdout) | 8.8% of rows sent to a person; the rest 98.9% correct |
+
 ## Intended use
 
-Suggest one of six classes (`Category_1` to `Category_6`) for each line of an anonymized accounts payable ledger, with a calibrated confidence, a review flag, and an exact explanation. It is meant as a first pass that a reviewer checks: rows marked `review_required` go to a person, and every other row is still open to review. The model is not meant for ledgers whose vendors, accounts, and descriptions use a different anonymization scheme. Tokens such as `Word563` only mean something inside this dataset.
+A first pass for a reviewer. Each invoice line gets a suggested category, a calibrated confidence, a review flag, and an exact explanation. Rows marked `review_required` go to a person, and every other row stays open to review. The model only applies to ledgers anonymized the same way as this one: tokens such as `Word563` mean something only inside this dataset.
 
 ## Data
 
-- Source: `data/raw/Challenge_Data.xls`, 5,899 rows, inputs `Col1` to `Col7`, label `ClassificationLabel`. Eleven raw label spellings map to six classes (DECISIONS.md D01).
-- Holdout: 590 rows (10%), chosen by a seed rule written down before any modeling (D03). The two sides share no group. A group is a set of rows identical on every model input (vendor, amount, description, month, account, document type), so near-copies never sit on both sides (D02, D22). Holdout labels are read only by `evaluate-holdout`.
-- Training portion: 5,309 rows. Class counts: Category_1 4,694 (88.4%), Category_2 568 (10.7%), Category_3 20, Category_4 14, Category_6 11, Category_5 2.
-- Exact-duplicate structure: the label is almost fixed by vendor, description, account, amount, and document type. The deterministic ceiling is 0.9996 (`reports/eda/accuracy_ceiling.json`), so most of the remaining error comes from new or rare combinations, not from label noise.
+- **Source:** `data/raw/Challenge_Data.xls`, 5,899 invoice lines. The inputs are Col1 vendor, Col2 invoice number, Col3 amount, Col4 line description, Col5 posting date, Col6 GL account, and Col7 document flag; the label is `ClassificationLabel`. Eleven raw label spellings (typos, spacing) map to six categories by one fixed rule.
+- **Holdout:** 590 rows (10%), set aside before any analysis by a selection rule written down in advance. Rows that are identical on every model input (with the date reduced to its month) form a group, and no group is split between training and holdout, so the model is never tested on a copy of a training row. The holdout labels were read once, by `evaluate-holdout`.
+- **Training rows:** 5,309. Category_1 4,694 (88.4%), Category_2 568 (10.7%), Category_3 20, Category_4 14, Category_6 11, Category_5 2.
+- **Label consistency:** rows that agree on vendor, description, account, amount, and document flag almost always share a label; the best possible accuracy from those inputs is 0.9996. Remaining errors therefore come from new or rare combinations, not from contradictory labels.
 
 ## Model
 
-The model is a log-odds blend of two members. Both use the same scikit-learn feature pipeline (`ledgerclf/features.py`):
+Both members read the same scikit-learn feature pipeline (`ledgerclf/features.py`):
 
-- **Features:** per-column TF-IDF on word tokens (1- and 2-grams), whole-value and vendor-account pair one-hots, document type, signed log amount, amount flags (credit, round), and a period index clipped to the training range. Missing amounts and dates are imputed with training medians inside the pipeline.
-- **Logistic regression:** C = 3.0, with class weights (n_max / n_c)^0.25.
-- **LightGBM:** 800 trees, learning rate 0.1, 31 leaves, min_child_samples 1, subsample 0.7, colsample 0.8, reg_lambda 1. It runs with `deterministic=True` and `n_jobs=1`.
-- **Blend:** logits = 0.7 x logistic + 0.3 x LightGBM, divided by temperature 1.392. Contributions stay exactly additive: logistic coefficient x feature value, plus LightGBM `pred_contrib`, add up to the logit. The maximum gap is 7e-12, which is what makes the per-row explanations exact.
-- **Selection:** the champion was chosen by a rule fixed before tuning (D11). It takes the best grouped-CV accuracy among candidates that pass a macro-F1 floor and an out-of-time floor. The highest-accuracy candidate without class weights (blend p0) failed the macro-F1 floor.
+- **Features:** a separate TF-IDF vocabulary per text column (vendor, description, account; single words and word pairs); one-hot indicators for recurring whole vendors, accounts, and vendor-account pairs; the document flag; the amount as a signed log plus credit and round-amount flags; the posting month as an index clipped to the training range. Missing amounts and dates are filled with training medians inside the pipeline. Col2 is an identifier and is not used.
+- **Logistic regression:** C = 3.0, class weights (n_max / n_c)^0.25.
+- **LightGBM:** 800 trees, learning rate 0.1, 31 leaves, minimum 1 row per leaf, subsample 0.7, column sample 0.8, L2 penalty 1, deterministic and single-threaded.
+- **Blend:** score = (0.7 x logistic + 0.3 x LightGBM) / 1.392, in log-odds. Because both parts are additive (logistic coefficient x feature value, plus LightGBM's per-feature contributions), every prediction splits exactly into one contribution per input. The largest numerical gap is 7e-12, which is what makes the explanations exact rather than approximate.
 
-## Metrics (training portion; holdout below)
+## Results
 
-Every CV uses `StratifiedGroupKFold` on the group key, with 5 folds and 3 seeds.
+**Cross-validation** (5 grouped folds x 3 seeds on the training rows; "macro F1" averages the F1 score of the five classes with 11 or more rows, so rare classes count as much as common ones):
 
-| Measure | Champion (blend p0.25) | Fallback (logistic p0) | Majority baseline |
+| Measure | Final model | Fallback (logistic) | Majority baseline |
 |---|---|---|---|
-| Grouped CV accuracy | 0.9539 +- 0.0068 | 0.9513 +- 0.0082 | 0.8842 |
-| Grouped CV macro F1 (5 classes, Category_5 excluded) | 0.7475 | 0.6887 | 0.1877 |
-| Out-of-time accuracy (train to 2018-09, test after) | 0.9403 | 0.9442 | - |
-| Out-of-time macro F1 (5 classes) | 0.8743 | 0.6784 | - |
-| Nested CV accuracy (tuning inside each outer fold) | 0.9548 +- 0.0050 | - | - |
+| Accuracy | 0.9539 +- 0.0068 | 0.9513 +- 0.0082 | 0.8842 |
+| Macro F1 | 0.7475 | 0.6887 | 0.1877 |
+| Out-of-time accuracy (train to 2018-09, test later months) | 0.9403 | 0.9442 | - |
+| Out-of-time macro F1 | 0.8743 | 0.6784 | - |
+| Nested CV accuracy (tuning repeated inside each outer fold) | 0.9548 +- 0.0050 | - | - |
 
-- **Validation schemes** (logistic, `reports/benchmark/validation_schemes.csv`): a random split gives 0.9636, while grouped CV gives 0.9493. The 1.4-point gap is the leakage a random split would hide. Unseen-vendor CV gives 0.9134.
-- **Out-of-fold per class** (champion, `reports/selection/oof_classification_report.csv`):
+A random split would report 0.9636 for the logistic model against 0.9493 with grouped folds. The 1.4-point gap is the inflation that grouping removes. On vendors never seen in training, accuracy is 0.913 (unseen-vendor CV).
 
-| Class | Precision | Recall | Support |
+**Holdout** (590 rows, scored once on 2026-10-17; `reports/holdout/`):
+
+| Measure | Final model | Fallback | Cross-validation (final model) |
 |---|---|---|---|
-| Category_1 | 0.971 | 0.979 | 4,694 |
-| Category_2 | 0.830 | 0.773 | 568 |
-| Category_3 | 0.826 | 0.950 | 20 |
-| Category_4 | 0.438 | 0.500 | 14 |
-| Category_5 | 0.000 | 0.000 | 2 |
-| Category_6 | 1.000 | 0.364 | 11 |
-
-## Calibration and review routing
-
-- **Temperature scaling:** fitted on out-of-fold logits. Expected calibration error drops from 0.019 to 0.0066 and Brier score from 0.0690 to 0.0667 (`reports/selection/calibration_summary.json`). Scaling divides every logit by the same number, so contributions stay additive.
-- **Review threshold:** 0.8, chosen by rule D17 (`reports/selection/threshold_table.csv`). In out-of-fold data, 92.7% of rows fall above it with 97.9% accuracy, and the 7.3% below it have 63.4% accuracy.
-- **Flags:** each flag's severity comes from out-of-fold accuracy (D18). A critical flag sends the row to review: unseen vendor 0.896, unseen account 0.893, low confidence 0.634. Rows with no flag reach 0.982. Flags never withhold a prediction.
-
-## Holdout evaluation (run once, 2026-10-17)
-
-The 590 holdout rows were scored once, with the models exactly as trained above (access log: `reports/holdout/access_log.csv`).
-
-| Measure | Champion | Fallback | CV estimate (champion) |
-|---|---|---|---|
-| Accuracy | **0.9712** | 0.9525 | 0.9539 +- 0.0068 |
-| Macro F1 (5 classes) | 0.7068 | 0.6880 | 0.7475 |
+| Accuracy | **0.9712** | 0.9525 | 0.9539 |
+| Macro F1 | 0.7068 | 0.6880 | 0.7475 |
 | Expected calibration error | 0.011 | 0.023 | 0.0066 |
 | Rows sent to review | 8.8% | 8.8% | 7.3% |
 | Accuracy on rows not sent to review | 0.9888 | 0.9888 | 0.9791 |
 
-Per class (champion): Category_1 recall 0.990 (521 rows), Category_2 0.841 (63), Category_3 3 of 3, Category_6 1 of 1, Category_4 0 of 2 (both predicted Category_1). The holdout holds no Category_5 row.
+| Class (final model) | Precision | Recall | Holdout rows | Cross-validation recall | Training rows |
+|---|---|---|---|---|---|
+| Category_1 | 0.977 | 0.990 | 521 | 0.979 | 4,694 |
+| Category_2 | 0.930 | 0.841 | 63 | 0.773 | 568 |
+| Category_3 | 1.000 | 1.000 | 3 | 0.950 | 20 |
+| Category_4 | 0.000 | 0.000 | 2 | 0.500 | 14 |
+| Category_5 | - | - | 0 | 0.000 | 2 |
+| Category_6 | 0.500 | 1.000 | 1 | 0.364 | 11 |
 
-Reading the result: the holdout accuracy is about 2 standard errors above the CV estimate. Two effects explain most of it. First, the final model learned from all 5,309 training rows, while each CV model saw about 4,250. Second, the holdout has slightly fewer unfamiliar rows (2.0% new vendors versus 2.9% in CV, 5.8% new vendor-account pairs versus 7.1%). Training and holdout share no group and no identical row. The CV figure (about 95%) remains the honest expectation for new data. With 1 to 3 holdout rows per rare class, the holdout macro F1 is too noisy to compare closely with CV.
+The holdout accuracy is about 2 standard errors above the cross-validation estimate. Two effects explain most of it. First, the final model learned from all 5,309 training rows, while each cross-validation model saw about 4,250. Second, the holdout has slightly fewer unfamiliar rows: 2.0% new vendors against 2.9% in cross-validation, and 5.8% new vendor-account pairs against 7.1%. Training and holdout share no group and no identical row. **The cross-validation figure (about 95%) is the honest expectation for new data.** With 1 to 3 holdout rows per rare class, the holdout macro F1 is too noisy to compare closely.
+
+## Calibration and review routing
+
+- **Calibration:** one temperature (1.392) is fitted on out-of-fold scores, so that a stated confidence matches the observed accuracy. Expected calibration error falls from 0.019 to 0.0066. Dividing every score by one number changes neither the predicted category nor the exact explanations.
+- **Review threshold: 0.8.** This is the lowest confidence at which automatically decided rows reach 97.5% accuracy out of fold. Out of fold, 92.7% of rows fall above it at 97.9% accuracy, and the 7.3% below it are only 63.4% accurate.
+- **Flags:** a flag becomes critical (review required) when its rows are at least 5 points less accurate than average out of fold. Out-of-fold accuracy: new vendor 0.896, new GL account 0.893, low confidence 0.634; rows with no flag 0.982. Flags mark risk; they never withhold a prediction.
+
+## Key design choices
+
+| Choice | Why | Evidence |
+|---|---|---|
+| Grouped splits and grouped cross-validation everywhere | 26% of training rows duplicate another row except for the invoice number; random splits test the model on copies it memorized | A random split inflates accuracy by 1.4 points (notebook 03, section 1) |
+| Final model chosen by a rule fixed before tuning | Prevents picking whatever looks best after the fact | The decision trail is in `reports/selection/champion_decision.json` |
+| Log-odds blend instead of averaging probabilities | Exact additive explanations, and slightly more accurate | +0.0008 accuracy over a probability average with identical members |
+| Mild class weights (power 0.25) | Rare-class recall without false rare alarms on common rows | Macro F1 0.70 to 0.75 for the blend; false rare alarms stay at 1 (notebook 03, section 4) |
+| Every transformer fitted inside each training fold | No statistic leaks from test rows into training | A unit test checks that the fitted vocabulary comes only from the rows it was fitted on |
+| Col2 (invoice number) dropped | An identifier that never recurs, partly corrupted (`4.80P+11`) | Format features add less than one fold's standard deviation |
+| Per-column TF-IDF on anonymized tokens, no pretrained language model | Tokens have no meaning a pretrained model could use; the same token means different things in different columns | Description words alone carry 1.7 accuracy points (ablation) |
+| Outliers kept, amounts as a signed log | Large invoices are real; credits must stay negative | 227 of 235 outliers are ordinary Category_1 rows |
+| Calibrated confidence plus a review threshold | Lets a reviewer trust "auto" rows and focus on risky ones | Holdout: auto rows 98.9% correct, reviewed rows 78.9% |
+| Holdout labels guarded in the dashboard | A copy of the holdout (even re-saved or with Col2 removed) must not be scored before the official evaluation | Row fingerprints on model inputs; tests cover re-saved and edited copies |
 
 ## Limitations
 
-- **Rare classes:** Category_3 to Category_6 have 2 to 20 training rows each, and Category_5 has only 2. Recall on them is unstable across folds, and Category_5 is almost never predicted. Macro F1 therefore excludes Category_5 and is reported alongside accuracy.
-- **Unseen vendors and accounts:** accuracy falls to about 0.89 on rows whose vendor or account was not seen in training. Such rows carry a critical flag.
-- **Anonymized tokens:** the model learns token identity, not meaning. A real vendor name or a new anonymization run would need retraining.
-- **Time drift:** the data covers one period range. Dates outside it are clipped and flagged.
-- **In-sample uploads:** labeled rows that were part of training score near 100%. The service warns when an upload contains them (D35).
+- **Rare classes:** Category_3 to Category_6 have 2 to 20 training rows each. Their recall is unstable across folds, and Category_5 (2 rows) is essentially never predicted. Results are therefore reported as accuracy and macro F1 side by side.
+- **New vendors and accounts:** accuracy falls to about 0.89 on rows whose vendor or account never appeared in training. Such rows are flagged for review.
+- **Anonymized tokens:** the model learns token identities, not meanings. Real vendor names, or the same ledger anonymized differently, would need retraining.
+- **Time range:** training covers 2016-10 to 2018-12, mostly 2018. Dates outside that range are clipped to it and flagged.
+- **Labeled uploads that overlap training:** accuracy on rows the model was trained on is close to 100%. The dashboard warns when an upload contains such rows.
 
 ## Fallback behavior
 
-If LightGBM cannot load (for example macOS without `libomp`), or `LEDGERCLF_FORCE_FALLBACK=1` is set, the service loads `model_fallback.joblib`. This is a temperature-calibrated logistic regression with the same features and no LightGBM objects. It gives a grouped CV accuracy of 0.9513. Every prediction and explanation reports which model produced it and why the fallback is active.
+If LightGBM cannot load (for example on macOS without `libomp`), or `LEDGERCLF_FORCE_FALLBACK=1` is set, the service loads `artifacts/model_fallback.joblib`. It is a temperature-calibrated logistic regression with the same features and no LightGBM parts: 0.9513 cross-validation accuracy and 0.9525 on the holdout. Every prediction and explanation states which model produced it, and why the fallback is active.
 
 ## Reproducibility
 
-`python -m ledgerclf train` refits the bundle on the training portion and writes `artifacts/golden_holdout_predictions.csv`. `python tools/compare_golden.py` checks a fresh run against that file. On the same machine the maximum probability difference is 5e-11. Library versions are pinned exactly (`requirements.txt`) and recorded in `artifacts/metadata.json`.
+Library versions are pinned exactly (`requirements.txt`) and recorded in `artifacts/metadata.json`. Seeds are fixed and LightGBM runs deterministically. `python -m ledgerclf train` refits both models and rewrites `artifacts/golden_holdout_predictions.csv`; `python tools/compare_golden.py` compares a fresh run against it. On the same machine the largest probability difference is 5e-11.

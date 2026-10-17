@@ -27,5 +27,5 @@ def test_trailing_comma_only_rows_do_not_trigger_row_limit(tmp_path):
     text = ",".join(HEADER) + "\n" + data_rows + "\n" + ",,,,,,\n" * 250_000
     path = tmp_path / "formatted_tail.csv"
     path.write_text(text, encoding="utf-8")
-    frame, _ = run_path(path, path.name)  # docs/05 2.1: the limit is 200,000 *data* rows
+    frame, _ = run_path(path, path.name)  # the limit is 200,000 *data* rows
     assert len(frame) == 590

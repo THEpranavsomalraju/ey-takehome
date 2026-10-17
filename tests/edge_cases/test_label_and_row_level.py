@@ -1,4 +1,4 @@
-"""Edge cases L01 to L04 and R01 to R04 (docs/05 section 4) at the validation layer.
+"""Edge cases L01 to L04 and R01 to R04 at the validation layer.
 
 Metric and prediction assertions for the same IDs live in
 ``test_prediction_level.py``.

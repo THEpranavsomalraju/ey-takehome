@@ -27,7 +27,7 @@ def main() -> int:
     args = parser.parse_args()
     golden_path = ROOT / "artifacts" / "golden_holdout_predictions.csv"
     if not golden_path.exists():
-        print("SKIP: artifacts/golden_holdout_predictions.csv does not exist yet (Phase 6).")
+        print("SKIP: the golden file does not exist yet. Run: python -m ledgerclf train")
         return 0
 
     from ledgerclf.golden import compare_with_golden

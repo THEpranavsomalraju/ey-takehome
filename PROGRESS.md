@@ -2,19 +2,19 @@
 
 Living log. Updated after every gate run and every session. Format rules: docs/06 section 10.
 
-## Status summary (2026-10-17, midday)
+## Status summary (2026-10-17, afternoon)
 
-- **Model:** trained on the 90% training portion (5,309 rows). Champion: log-odds blend p0.25 (logistic + LightGBM). Grouped CV accuracy 0.9539, macro F1 (5 classes) 0.7475, out-of-time 0.9403, nested CV 0.9548 +- 0.005. Temperature 1.39 (ECE 0.019 -> 0.0066), review threshold 0.8. Fallback logistic: 0.9513.
-- **Holdout:** untouched. Evaluation waits for the owner's approval.
-- **Backend:** validation and prediction service, exact explanations, row-level holdout label guard (D35), Claude agent live through the relay and direct key (D32), FastAPI server, packaging with secret scan. Gate PASS.
-- **Docs:** README, MODEL_CARD, notebooks 01 to 03 (executed), DECISIONS D00 to D37.
-- **Reviews:** cycle 2 complete (code review C1 W11, leakage C1 W2, edge round 3 C3 W8): every Critical and Warning fixed with tests.
-- **Next:** dashboard UI (frontend/dist), holdout evaluation (after approval), notebook 03 holdout section, clean-room run (tools/clean_room.py), CI on GitHub (optional, needs a push).
-- **Open questions for the owner:** holdout approval; include `.claude/`, `CLAUDE.md`, `PROGRESS.md` in the ZIP (`--with-dev-notes`); D34.
+- **Holdout evaluated once (approved):** champion 0.9712 accuracy (CV 0.9539), fallback 0.9525; review share 8.8%, auto rows 0.9888. Access log in reports/holdout/access_log.csv.
+- **Agent:** live with the owner's key (direct and relay); business-friendly three-part answers (Summary, Model facts, What to check); relay redeployed with the new prompt hash.
+- **GitHub:** private repo THEpranavsomalraju/ey-takehome. CI: macOS and Linux green on 3.11 to 3.14 and fallback job green; Windows fixed (LF writes, .gitattributes, CRLF-tolerant split hash), rerun pending; canary pandas 3 issue fixed.
+- **Grader-facing pass:** notebooks 01 to 03 rewritten (no internal references, terms defined, holdout section), README tour, MODEL_CARD with key design choices; code comment cleanup in progress.
+- **ZIP:** README, MODEL_CARD, notebooks, ledgerclf, frontend, data, artifacts, reports, tests, relay, 2 tools, requirements, pyproject, Dockerfile. No docs/, DECISIONS.md, dev notes, secrets.
+- **Left:** dashboard UI; then clean-room run and final ZIP.
+- **Commit rule (owner):** no Claude attribution in commit messages.
 
 ## Current phase
 
-Block F: dashboard UI, holdout evaluation, packaging. Status: IN PROGRESS (backend complete)
+Block F: dashboard UI and packaging. Status: IN PROGRESS (backend, holdout, docs complete)
 
 ## Phase status overview
 

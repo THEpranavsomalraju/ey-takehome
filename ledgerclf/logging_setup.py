@@ -1,7 +1,7 @@
 """Logging configuration with an ASCII-safe formatter.
 
 Windows consoles often use cp1252. Escaping non-ASCII characters keeps every
-log line printable on any console (docs/05 section 5.5).
+log line printable on any console.
 """
 
 from __future__ import annotations

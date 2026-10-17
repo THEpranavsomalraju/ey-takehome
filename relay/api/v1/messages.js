@@ -1,7 +1,7 @@
 // Relay for the ledger classifier's explanation agent.
 //
 // The local app calls this endpoint instead of api.anthropic.com, so graders need no API
-// key and the project owner's key never leaves Vercel. The relay only accepts requests
+// key and the author's key never leaves Vercel. The relay only accepts requests
 // shaped like the agent's: a fixed model, a capped output length, exactly the agent's four
 // tools, and the agent's own system prompt (checked by hash). Any other field is dropped.
 import { createHash } from "node:crypto";

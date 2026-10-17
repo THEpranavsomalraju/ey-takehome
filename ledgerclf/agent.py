@@ -2,9 +2,10 @@
 
 Runs only when a user asks for one row's explanation (never preloaded).
 Engine order: the user's own ``ANTHROPIC_API_KEY``, then the hosted relay
-(the project owner's key stays server-side), then the offline engine. Any
+(the author's key stays server-side), then the offline engine. Any
 failure, timeout, or ungrounded answer falls back to the offline engine,
-which calls the same tools in a fixed order (DECISIONS.md D25).
+which calls the same tools in a fixed order. This is the package's only
+network use; prediction and reports never touch the network.
 """
 
 from __future__ import annotations

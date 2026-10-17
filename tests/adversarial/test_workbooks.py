@@ -25,7 +25,7 @@ def test_header_only_template_sheet_does_not_hide_data_sheet(tmp_path):
 
     path = tmp_path / "template_first.xlsx"
     path.write_bytes(xlsx_from(build))
-    frame, _ = run_path(path, path.name)  # docs/05 F11 intent: pick the sheet holding data
+    frame, _ = run_path(path, path.name)  # edge case F11: pick the sheet holding data
     assert len(frame) == 2
 
 
@@ -59,7 +59,7 @@ def test_no_header_block_at_c3_error_does_not_echo_blank_cells(tmp_path):
     except LedgerClfError as error:
         assert "None, None" not in error.message, error.message
     else:
-        assert len(frame) == 2  # docs/05 2.4.3: blank rows and columns are dropped
+        assert len(frame) == 2  # blank rows and columns are dropped
 
 
 def test_xlsb_container_is_reported_as_unsupported_format():
@@ -80,7 +80,7 @@ def test_legacy_encrypted_xls_is_reported_as_password_protected():
         pytest.raises(FileReadError) as caught,
     ):
         read_table(ole, "locked.xls", get_settings().limits)
-    assert caught.value.code == "PASSWORD_PROTECTED"  # docs/05 2.1: reader reports encryption
+    assert caught.value.code == "PASSWORD_PROTECTED"  # the reader reports encryption
 
 
 def test_html_table_saved_as_xls_gets_a_clear_message():

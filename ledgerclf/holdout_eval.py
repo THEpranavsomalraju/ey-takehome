@@ -1,4 +1,4 @@
-"""The single holdout evaluation (docs/04 section 11, CLAUDE.md rule 1).
+"""The single holdout evaluation, the only code that reads holdout labels.
 
 Runs only from ``python -m ledgerclf evaluate-holdout --confirm``. Refuses to
 run twice unless a reason is given, logs every access, and scores both

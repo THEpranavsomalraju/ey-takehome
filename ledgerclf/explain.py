@@ -1,4 +1,4 @@
-"""Exact per-row explanation payloads (docs/02 section 5, docs/04 section 13).
+"""Exact per-row explanation payloads.
 
 The payload explains the margin between the predicted class and the
 runner-up: every feature's contribution to that margin, aggregated by source

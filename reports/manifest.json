@@ -190,7 +190,7 @@
         "fence_high",
         "class"
       ],
-      "description": "Rows outside 1.5 x IQR fences of the signed-log amount. Kept in training because they look like real ledger values (D07).",
+      "description": "Rows outside 1.5 x IQR fences of the signed-log amount. Kept in training because they look like real ledger values, and inference never drops rows.",
       "file": "eda/amount_outliers.csv",
       "producer": "eda",
       "title": "Amount outliers (IQR on signed log)"
@@ -627,7 +627,7 @@
         "dropped",
         "transformers"
       ],
-      "description": "Every transformer with its steps, parameters, reason, and decision id.",
+      "description": "Every transformer with its steps, parameters, reason, and design decision.",
       "file": "preprocessing/transformer_catalog.json",
       "producer": "eda",
       "title": "Transformer catalog"
@@ -639,7 +639,7 @@
         "accuracy",
         "severity"
       ],
-      "description": "Out-of-fold accuracy of rows carrying each risk flag, with fold-specific reference statistics; sets flag severities (D18).",
+      "description": "Out-of-fold accuracy of rows carrying each risk flag, with fold-specific reference statistics; sets flag severities.",
       "file": "selection/accuracy_by_flag.csv",
       "producer": "select",
       "title": "Accuracy by flag"
@@ -714,7 +714,7 @@
         "trail",
         "tuning_quick_mode"
       ],
-      "description": "The decision rule of DECISIONS.md D11 applied step by step, with the chosen champion and fallback.",
+      "description": "The pre-registered decision rule applied step by step, with the chosen champion and fallback.",
       "file": "selection/champion_decision.json",
       "producer": "select",
       "title": "Champion decision"
@@ -731,7 +731,7 @@
         "predicted_label",
         "confidence"
       ],
-      "description": "Out-of-fold errors made with calibrated confidence of 0.9 or more: candidates for client label review (D21).",
+      "description": "Out-of-fold errors made with calibrated confidence of 0.9 or more: candidates for client label review instead of silently altering labels.",
       "file": "selection/high_confidence_errors.csv",
       "producer": "select",
       "title": "High-confidence errors"
@@ -773,7 +773,7 @@
         "rows_flagged",
         "chosen"
       ],
-      "description": "Coverage and accuracy when rows below each calibrated confidence threshold go to review; the chosen threshold follows D17.",
+      "description": "Coverage and accuracy when rows below each calibrated confidence threshold go to review; the chosen threshold is the lowest whose kept accuracy reaches the target.",
       "file": "selection/threshold_table.csv",
       "producer": "select",
       "title": "Confidence threshold table"

@@ -1,9 +1,9 @@
 """Probability calibration: temperature scaling, ECE, Brier, reliability and threshold tables.
 
-Temperature scaling (finishing item D) divides the blended logits by one
+Temperature scaling divides the blended logits by one
 scalar T fitted on out-of-fold logits. It keeps the argmax (accuracy is
 unchanged) and keeps logits additive, so explanations stay exact; isotonic
-or sigmoid calibration would break that (docs/04 section 9).
+or sigmoid calibration would break that.
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ def threshold_table(proba: np.ndarray, y: np.ndarray, thresholds: Sequence[float
 
 
 def choose_threshold(table: pd.DataFrame, target_kept_accuracy: float, default: float) -> float:
-    """Return the lowest threshold whose kept accuracy reaches the target (D17 rule).
+    """Return the lowest threshold whose kept accuracy reaches the target.
 
     Args:
         table: Output of ``threshold_table``.

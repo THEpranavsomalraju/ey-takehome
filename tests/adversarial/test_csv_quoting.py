@@ -19,7 +19,7 @@ def test_text_cell_longer_than_csv_field_limit_is_truncated_not_crashing(tmp_pat
     try:
         frame, issues = run_path(path, path.name)
     except LedgerClfError:
-        pytest.fail("a long text cell is a value problem, not a structural error (docs/05 V18)")
+        pytest.fail("a long text cell is a value problem, not a structural error (edge case V18)")
     assert len(frame) == 2
     assert "TEXT_TRUNCATED" in codes(issues)
 
@@ -28,7 +28,7 @@ def test_unclosed_quote_in_large_file_never_raises_raw_csv_error(tmp_path):
     rows = [ROW_A, with_value(ROW_A, 3, '"6 inch pipe')] + [ROW_B] * 3_000
     path = tmp_path / "unclosed_quote_large.csv"
     path.write_text(csv_text(rows), encoding="utf-8")
-    # A clear LedgerClfError is acceptable; a raw _csv.Error is not (principle 3).
+    # A clear LedgerClfError is acceptable; a raw _csv.Error is not (reading never crashes).
     with contextlib.suppress(LedgerClfError):
         run_path(path, path.name)
 
@@ -42,7 +42,7 @@ def test_unclosed_quote_does_not_silently_swallow_following_rows(tmp_path):
         i.severity == "WARNING" and "quote" in i.message.lower() for i in issues
     )
     assert len(frame) == 4 or swallowed_warning, (
-        f"4 data rows became {len(frame)} with no quote warning (docs/05 principle 4)"
+        f"4 data rows became {len(frame)} with no quote warning (data loss must be reported)"
     )
 
 

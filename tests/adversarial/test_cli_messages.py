@@ -1,4 +1,4 @@
-"""CLI messages and exit codes for user mistakes (docs/02 section 10, docs/05 section 1.3).
+"""CLI messages and exit codes for user mistakes: plain English, never a traceback.
 
 Exit codes: 0 success, 1 user input error, 2 artifact or environment error,
 3 internal error.

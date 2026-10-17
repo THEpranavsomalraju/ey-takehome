@@ -1,10 +1,11 @@
-"""Champion selection, calibration analysis, thresholds, and flag policy (items A and D).
+"""Champion selection, calibration analysis, thresholds, and flag policy.
 
 ``select`` scores the four pre-registered candidates with their tuned
-parameters, applies the decision rule recorded in DECISIONS.md D11 before
-this code ran, calibrates the champion and the fallback with temperature
-scaling on out-of-fold logits, picks the review threshold by rule (D17),
-measures accuracy per flag with fold-specific reference statistics (D18),
+parameters, applies the decision rule fixed before this code ran
+(``config.DecisionRule``), calibrates the champion and the fallback with
+temperature scaling on out-of-fold logits, picks the review threshold as
+the lowest one whose kept accuracy reaches the target, measures accuracy
+per flag with fold-specific reference statistics to set flag severities,
 and writes ``artifacts/champion.json`` for ``train``.
 """
 
@@ -144,7 +145,7 @@ def score_candidates(
 
 
 def apply_decision_rule(candidates: list[CandidateScore], rule: DecisionRule) -> ChampionDecision:
-    """Apply the pre-registered champion rule (docs/04 section 8, DECISIONS.md D11).
+    """Apply the pre-registered champion rule.
 
     Args:
         candidates: Scored candidates.
@@ -170,7 +171,7 @@ def apply_decision_rule(candidates: list[CandidateScore], rule: DecisionRule) ->
         )
     if not eligible:
         raise ConfigError(
-            "No candidate passes both guardrails of the champion rule (D11), which does not "
+            "No candidate passes both guardrails of the champion rule, which does not "
             "define this case. Decision trail: " + " | ".join(trail),
             code="NO_ELIGIBLE_CANDIDATE",
         )
@@ -283,7 +284,7 @@ def accuracy_by_flag(flags: pd.DataFrame, correct: np.ndarray) -> pd.DataFrame:
 def evidence_policy(
     table: pd.DataFrame, threshold: float, settings: Settings
 ) -> tuple[ReviewPolicy, list[str]]:
-    """Set flag severities from out-of-fold evidence (rule in config.FlagPolicyParams, D18)."""
+    """Set flag severities from out-of-fold evidence (rule in config.FlagPolicyParams)."""
     params = settings.flag_policy
     overall = float(table.loc[table["flag"] == "(all rows)", "accuracy"].item())
     severities, notes = dict(DEFAULT_SEVERITIES), []
@@ -400,7 +401,7 @@ SELECTION_REPORTS: dict[str, tuple[str, str]] = {
     ),
     "selection/champion_decision.json": (
         "Champion decision",
-        "The decision rule of DECISIONS.md D11 applied step by step, with the chosen champion "
+        "The pre-registered decision rule applied step by step, with the chosen champion "
         "and fallback.",
     ),
     "selection/blend_comparison.csv": (
@@ -427,18 +428,18 @@ SELECTION_REPORTS: dict[str, tuple[str, str]] = {
     "selection/threshold_table.csv": (
         "Confidence threshold table",
         "Coverage and accuracy when rows below each calibrated confidence threshold go to "
-        "review; the chosen threshold follows D17.",
+        "review; the chosen threshold is the lowest whose kept accuracy reaches the target.",
     ),
     "selection/accuracy_by_flag.csv": (
         "Accuracy by flag",
         "Out-of-fold accuracy of rows carrying each risk flag, with fold-specific reference "
-        "statistics; sets flag severities (D18).",
+        "statistics; sets flag severities.",
     ),
     "selection/high_confidence_errors.csv": (
         "High-confidence errors",
         "Out-of-fold errors made with calibrated confidence of "
         f"{FlagPolicyParams().high_confidence_error} or more: candidates for client label "
-        "review (D21).",
+        "review instead of silently altering labels.",
     ),
 }
 
@@ -596,4 +597,6 @@ def write_champion(
     }
     settings.paths.artifacts.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, indent=2, sort_keys=True)
-    (settings.paths.artifacts / CHAMPION_FILE).write_text(text + "\n", encoding="utf-8")
+    (settings.paths.artifacts / CHAMPION_FILE).write_text(
+        text + "\n", encoding="utf-8", newline="\n"
+    )

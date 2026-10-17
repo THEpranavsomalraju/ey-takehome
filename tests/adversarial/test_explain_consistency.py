@@ -1,9 +1,9 @@
 """explain() must describe the row it was asked for, with the model that predicted it.
 
-docs/02 section 8: ``explain(result, row_number)`` takes the row number as shown in
-the predictions table. Today it indexes by table position, so a re-ordered table
-(dashboards sort by confidence) yields a payload mixing two rows. It also accepts a
-result produced by another bundle, mixing one model's probabilities with the other
+``explain(result, row_number)`` takes the row number as shown in the predictions
+table. Indexing by table position instead would make a re-ordered table (dashboards
+sort by confidence) yield a payload mixing two rows. A result produced by another
+bundle must be rejected, or one model's probabilities would be mixed with the other
 model's contributions.
 """
 

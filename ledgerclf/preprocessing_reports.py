@@ -1,4 +1,4 @@
-"""Preprocessing reports (docs/04 section 15, ``reports/preprocessing``).
+"""Preprocessing reports (``reports/preprocessing``).
 
 Shows what each stage of the shared pipeline does to the data: stage
 snapshots, before and after samples, the feature space by group, and a
@@ -38,28 +38,43 @@ PRODUCER = "eda"
 TRANSFORMER_NOTES: dict[str, tuple[str, str]] = {
     "col1_tokens": (
         "Vendor tokens carry identity; one vectorizer per column keeps roles apart.",
-        "D05",
+        "TF-IDF per column (words; tuning adds word pairs); a shared vocabulary mixes roles.",
     ),
     "col1_value": (
         "Whole vendor names recur; values seen once fold into an infrequent bucket.",
-        "D05",
+        "Whole-value one-hot with a minimum frequency of 2.",
     ),
     "col4_tokens": (
-        "Line descriptions are the strongest single signal (ablation: -4 points).",
-        "D05",
+        "Line descriptions are the strongest single signal (ablation: -1.7 points).",
+        "TF-IDF per column; the final model uses single words and word pairs.",
     ),
-    "col6_tokens": ("Account tokens separate classes within a vendor.", "D05"),
-    "col6_value": ("Whole account names, infrequent values bucketed.", "D05"),
-    "pair": ("Vendor-account pairs resolve vendors split across classes.", "D05"),
-    "col7": ("Document flag; Doc3 holds most Category_4 rows.", "D05"),
-    "amount": ("Signed log keeps credits negative and tames an 8.8 million maximum.", "D07"),
+    "col6_tokens": (
+        "Account tokens separate classes within a vendor.",
+        "TF-IDF with sublinear term frequency.",
+    ),
+    "col6_value": (
+        "Whole account names, infrequent values bucketed.",
+        "Kept after ablation: the champion loses accuracy without it.",
+    ),
+    "pair": (
+        "Vendor-account pairs resolve vendors split across classes.",
+        "Pair one-hot with a minimum frequency of 2.",
+    ),
+    "col7": (
+        "Document flag; Doc3 holds most Category_4 rows.",
+        "One-hot of the canonical document type.",
+    ),
+    "amount": (
+        "Signed log keeps credits negative and tames an 8.8 million maximum.",
+        "No clipping and no outlier removal; inference never drops rows.",
+    ),
     "amount_flags": (
         "Negative and round amounts mark rare classes (Category_5, Category_3/4).",
-        "D07",
+        "Amount features carry the only Category_5 signal.",
     ),
     "period": (
         "Monthly period index, clipped to the training range to stop extrapolation.",
-        "D08",
+        "Without the period, Category_4 recall falls from 0.55 to 0.38 (ablation).",
     ),
 }
 
@@ -170,7 +185,7 @@ def model_inputs(pipeline: Any, row: pd.DataFrame) -> dict[str, str]:
     period = int(named["period"][:-1].transform(row[[PERIOD]])[0, 0])
     return {
         **text,
-        COL_INVOICE: "not used by the model (D04)",
+        COL_INVOICE: "not used by the model (IDs would be memorized)",
         COL_AMOUNT: (
             f"signed_log={log_amount:.4f}, is_negative={int(negative)}, is_round={int(round_)}"
         ),
@@ -198,7 +213,7 @@ def feature_space_summary(fitted: FittedFeatures) -> pd.DataFrame:
 
 
 def transformer_catalog(settings: Settings) -> dict[str, Any]:
-    """List every transformer with its steps, parameters, reason, and decision id."""
+    """List every transformer with its steps, parameters, reason, and design decision."""
     pipeline = build_feature_pipeline(settings.feature)
     catalog = []
     for name, transformer, columns in pipeline.transformers:
@@ -218,7 +233,7 @@ def transformer_catalog(settings: Settings) -> dict[str, Any]:
         )
     return {
         "transformers": catalog,
-        "dropped": {COL_INVOICE: "Invoice number: display only (D04)."},
+        "dropped": {COL_INVOICE: "Invoice number: display only, so the model never memorizes IDs."},
     }
 
 
@@ -244,7 +259,7 @@ PREPROCESSING_CATALOG: dict[str, tuple[str, str]] = {
     ),
     "preprocessing/transformer_catalog.json": (
         "Transformer catalog",
-        "Every transformer with its steps, parameters, reason, and decision id.",
+        "Every transformer with its steps, parameters, reason, and design decision.",
     ),
 }
 

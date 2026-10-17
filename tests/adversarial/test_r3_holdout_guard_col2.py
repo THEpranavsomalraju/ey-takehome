@@ -1,10 +1,10 @@
 """The row-level holdout guard must not hinge on Col2, a column the model never reads.
 
 ``overlap.row_fingerprints`` joins all five text columns, Col2 (invoice number)
-included. Col2 is optional and display-only (docs/05 section 2.4 step 6, V16),
-so dropping it, or letting Excel mangle it on a re-save, leaves every
-prediction unchanged but changes every fingerprint: the holdout labels are
-then read and scored, which CLAUDE.md rule 1 and DECISIONS.md D35 forbid.
+included. Col2 is optional and display-only (edge case V16), so dropping it,
+or letting Excel mangle it on a re-save, leaves every prediction unchanged but
+changes every fingerprint. The holdout labels must still stay unread: only
+evaluate-holdout may read them, and holdout rows are recognized by row content.
 
 The test never touches the real holdout labels: it points a service at a temp
 project whose holdout files are synthetic (features file plus labeled copy).

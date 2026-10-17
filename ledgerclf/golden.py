@@ -1,8 +1,8 @@
 """Compare fresh predictions with the golden file written at training time.
 
 Same machine: identical labels, probabilities within 1e-6. Cross-platform:
-labels agree on at least 99.5% of rows, probabilities within 1e-4
-(docs/05 section 5.6). A model that cannot load here (LightGBM missing) is
+labels agree on at least 99.5% of rows, probabilities within 1e-4 (BLAS
+and compiler differences move the last digits). A model that cannot load here (LightGBM missing) is
 reported and skipped, never compared against a different model.
 """
 

@@ -13,7 +13,7 @@ def test_no_header_file_with_leading_empty_column_maps_inputs_unshifted(tmp_path
     path = tmp_path / "leading_blank_column.csv"
     path.write_text(csv_text(rows, header=None), encoding="utf-8")
     frame, _ = run_path(path, path.name)
-    # docs/05 2.4.3: drop columns with an empty header and no values.
+    # Columns with an empty header and no values are dropped.
     assert frame["Col1"].tolist() == [ROW_A[0], ROW_B[0]]
     assert frame["amount"].tolist() == [1200.0, 75.0]
     assert "ClassificationLabel" not in frame.columns

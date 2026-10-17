@@ -1,7 +1,7 @@
 {
   "duplicate_rows_all_inputs": 621,
   "duplicate_rows_group_key": 1364,
-  "group_key": "Col1, Col3, Col4, Col5 (monthly period), Col6, Col7; Col2 excluded (D02, D22)",
+  "group_key": "Col1, Col3, Col4, Col5 (monthly period), Col6, Col7; Col2 excluded (copies differ only by invoice number)",
   "groups": 3945,
   "groups_with_copies": 824,
   "label_conflict_groups": 1,

@@ -1,4 +1,4 @@
-"""Static portability checks (docs/05 section 6): AST and text scans of the source tree."""
+"""Static portability checks: AST and text scans of the source tree."""
 
 from __future__ import annotations
 

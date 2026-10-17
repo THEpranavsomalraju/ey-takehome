@@ -1,8 +1,9 @@
-"""Row-level risk flags and the review policy (docs/04 section 10).
+"""Row-level risk flags and the review policy.
 
-Flags mark risk; they never withhold a prediction (CLAUDE.md rule 8). A row
-needs human review when it carries any flag whose severity is critical.
-Severities are set by out-of-fold evidence in ``select`` (DECISIONS.md D18).
+Flags mark risk; they never withhold a prediction. A row needs human
+review when it carries any flag whose severity is critical. Severities are
+set by out-of-fold evidence in ``select``: a flag whose rows score well
+below overall accuracy becomes critical.
 """
 
 from __future__ import annotations

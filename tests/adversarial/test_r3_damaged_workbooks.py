@@ -1,12 +1,12 @@
 """Damaged workbooks end in FILE_UNREADABLE, never a raw parser exception.
 
-docs/05 section 1 principle 3 (never crash) and F04 (corrupted .xlsx: ERROR
-FILE_UNREADABLE). ``io._EXCEL_READ_ERRORS`` misses two parser failures:
+Reading never crashes with a raw exception, and a corrupted .xlsx ends in the
+ERROR FILE_UNREADABLE (edge case F04). ``io._EXCEL_READ_ERRORS`` must cover
 ``xml.etree.ElementTree.ParseError`` (a zip that holds damaged sheet,
 workbook, or styles XML) and the errors xlrd raises for a damaged OLE
-container (``CompDocError``, ``struct.error``). They escape as raw exceptions,
-the CLI answers "Internal error" with exit code 3 instead of a user error,
-and the API returns a plain-text 500.
+container (``CompDocError``, ``struct.error``). Otherwise they escape as raw
+exceptions, the CLI answers "Internal error" with exit code 3 instead of a
+user error, and the API returns a plain-text 500.
 """
 
 from __future__ import annotations

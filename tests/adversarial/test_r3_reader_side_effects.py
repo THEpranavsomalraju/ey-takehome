@@ -1,14 +1,14 @@
 """Reading files stays silent and within budget, and extreme values raise no numpy warnings.
 
 - xlrd prints "WARNING *** File is truncated" straight to stdout for a damaged
-  .xls, mixing third-party text into CLI output (CLAUDE.md rule 11: library
-  code never prints; docs/02 section 11: one ASCII-safe logging handler).
+  .xls, which would mix third-party text into CLI output (library code never
+  prints; all output goes through one ASCII-safe logging handler).
 - A one-row workbook whose used range reaches the last sheet row (a stray
-  space in A1048576, common after deleting rows in Excel) takes about 9 s,
-  far above P01 (590 rows under 2 s; tests allow three times the budget).
-- Amount 1e308 still overflows ``abs(amount) * 100`` in AmountFlags and emits
-  a RuntimeWarning on every predict and explain; the round 2 fix covered
-  1e17 only. V09 requires finite features without noise for huge amounts.
+  space in A1048576, common after deleting rows in Excel) must read within
+  budget P01 (590 rows under 2 s; tests allow three times the budget).
+- Amount 1e308 must not overflow ``abs(amount) * 100`` in AmountFlags or emit
+  a RuntimeWarning on predict and explain; a guard sized for 1e17 is not
+  enough. V09 requires finite features without noise for huge amounts.
 """
 
 from __future__ import annotations

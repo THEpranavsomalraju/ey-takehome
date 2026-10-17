@@ -1,4 +1,4 @@
-"""Edge cases F01 to F16 (docs/05 section 4, file level): reading and validation."""
+"""Edge cases F01 to F16 (file level): reading and validation."""
 
 from __future__ import annotations
 

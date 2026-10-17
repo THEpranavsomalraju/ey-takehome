@@ -1,11 +1,11 @@
 {
   "dropped": {
-    "Col2": "Invoice number: display only (D04)."
+    "Col2": "Invoice number: display only, so the model never memorizes IDs."
   },
   "transformers": [
     {
       "columns": "Col1",
-      "decision": "D05",
+      "decision": "TF-IDF per column (words; tuning adds word pairs); a shared vocabulary mixes roles.",
       "name": "col1_tokens",
       "reason": "Vendor tokens carry identity; one vectorizer per column keeps roles apart.",
       "steps": [
@@ -47,7 +47,7 @@
       "columns": [
         "Col1"
       ],
-      "decision": "D05",
+      "decision": "Whole-value one-hot with a minimum frequency of 2.",
       "name": "col1_value",
       "reason": "Whole vendor names recur; values seen once fold into an infrequent bucket.",
       "steps": [
@@ -74,9 +74,9 @@
     },
     {
       "columns": "Col4",
-      "decision": "D05",
+      "decision": "TF-IDF per column; the final model uses single words and word pairs.",
       "name": "col4_tokens",
-      "reason": "Line descriptions are the strongest single signal (ablation: -4 points).",
+      "reason": "Line descriptions are the strongest single signal (ablation: -1.7 points).",
       "steps": [
         {
           "class": "TextNormalizer",
@@ -114,7 +114,7 @@
     },
     {
       "columns": "Col6",
-      "decision": "D05",
+      "decision": "TF-IDF with sublinear term frequency.",
       "name": "col6_tokens",
       "reason": "Account tokens separate classes within a vendor.",
       "steps": [
@@ -156,7 +156,7 @@
       "columns": [
         "Col6"
       ],
-      "decision": "D05",
+      "decision": "Kept after ablation: the champion loses accuracy without it.",
       "name": "col6_value",
       "reason": "Whole account names, infrequent values bucketed.",
       "steps": [
@@ -186,7 +186,7 @@
         "Col1",
         "Col6"
       ],
-      "decision": "D05",
+      "decision": "Pair one-hot with a minimum frequency of 2.",
       "name": "pair",
       "reason": "Vendor-account pairs resolve vendors split across classes.",
       "steps": [
@@ -222,7 +222,7 @@
       "columns": [
         "Col7"
       ],
-      "decision": "D05",
+      "decision": "One-hot of the canonical document type.",
       "name": "col7",
       "reason": "Document flag; Doc3 holds most Category_4 rows.",
       "steps": [
@@ -251,7 +251,7 @@
       "columns": [
         "amount"
       ],
-      "decision": "D07",
+      "decision": "No clipping and no outlier removal; inference never drops rows.",
       "name": "amount",
       "reason": "Signed log keeps credits negative and tames an 8.8 million maximum.",
       "steps": [
@@ -280,7 +280,7 @@
       "columns": [
         "amount"
       ],
-      "decision": "D07",
+      "decision": "Amount features carry the only Category_5 signal.",
       "name": "amount_flags",
       "reason": "Negative and round amounts mark rare classes (Category_5, Category_3/4).",
       "steps": [
@@ -302,7 +302,7 @@
       "columns": [
         "period"
       ],
-      "decision": "D08",
+      "decision": "Without the period, Category_4 recall falls from 0.55 to 0.38 (ablation).",
       "name": "period",
       "reason": "Monthly period index, clipped to the training range to stop extrapolation.",
       "steps": [

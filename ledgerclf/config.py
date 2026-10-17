@@ -1,6 +1,6 @@
 """Project configuration: paths, seeds, limits, and every tunable number.
 
-All constants live here (CLAUDE.md rule 4). Values selected by the ``select``
+All constants live here, and only here. Values selected by the ``select``
 command are written to ``artifacts/champion.json`` and override the model
 defaults below at training time.
 """
@@ -17,7 +17,7 @@ PROJECT_ROOT = PACKAGE_ROOT.parent
 SUPPORTED_PYTHON = ((3, 11), (3, 14))
 FORCE_FALLBACK_ENV = "LEDGERCLF_FORCE_FALLBACK"
 
-# Exit codes shared by the CLI and the doctor (docs/02 section 10).
+# Exit codes shared by the CLI and the doctor.
 EXIT_OK = 0
 EXIT_USER_ERROR = 1
 EXIT_ENVIRONMENT_ERROR = 2
@@ -83,7 +83,7 @@ class Limits:
 
 @dataclass(frozen=True)
 class FeatureParams:
-    """Feature pipeline parameters (docs/04 section 3)."""
+    """Feature pipeline parameters."""
 
     token_pattern: str = r"(?u)\S+"
     ngram_range: tuple[int, int] = (1, 1)
@@ -107,7 +107,7 @@ class LinearParams:
 
 @dataclass(frozen=True)
 class TreeParams:
-    """LightGBM parameters (docs/04 section 4, ``lightgbm_p0``)."""
+    """Baseline LightGBM parameters (the ``lightgbm_p0`` leaderboard row)."""
 
     n_estimators: int = 500
     learning_rate: float = 0.05
@@ -123,7 +123,7 @@ class TreeParams:
 
 @dataclass(frozen=True)
 class BlendParams:
-    """Log-odds blend parameters (docs/04 section 6)."""
+    """Log-odds blend parameters."""
 
     linear_weight: float = 0.5
     temperature: float = 1.0
@@ -131,7 +131,7 @@ class BlendParams:
 
 @dataclass(frozen=True)
 class HoldoutRule:
-    """Written holdout seed rule (DECISIONS.md D03, docs/04 section 2.2)."""
+    """Written holdout seed rule, fixed before the split and based on label counts only."""
 
     n_splits: int = 10
     max_seed: int = 100
@@ -145,7 +145,7 @@ class HoldoutRule:
 
 @dataclass(frozen=True)
 class DecisionRule:
-    """Pre-registered champion decision rule (DECISIONS.md D11, docs/04 section 8)."""
+    """Champion decision rule, fixed before ``select`` first ran."""
 
     macro_f1_tolerance: float = 0.03
     oot_tolerance: float = 0.015
@@ -154,7 +154,7 @@ class DecisionRule:
 
 @dataclass(frozen=True)
 class CalibrationParams:
-    """Temperature scaling and confidence threshold settings (docs/04 section 9)."""
+    """Temperature scaling and confidence threshold settings."""
 
     temperature_bounds: tuple[float, float] = (0.05, 20.0)
     n_bins: int = 10
@@ -178,7 +178,7 @@ class EdaParams:
 
 @dataclass(frozen=True)
 class FlagPolicyParams:
-    """Evidence rule for flag severities (DECISIONS.md D18).
+    """Evidence rule for flag severities.
 
     A flag becomes critical when out-of-fold accuracy on its rows falls more
     than ``critical_gap`` below the overall out-of-fold accuracy, measured on
@@ -192,7 +192,7 @@ class FlagPolicyParams:
 
 @dataclass(frozen=True)
 class ExplainParams:
-    """Explanation payload settings (docs/04 section 13)."""
+    """Explanation payload settings."""
 
     top_features: int = 8
     evidence_tokens: int = 3
@@ -203,7 +203,7 @@ class ExplainParams:
 
 @dataclass(frozen=True)
 class BenchmarkParams:
-    """Benchmark and validation-scheme settings (docs/04 section 4)."""
+    """Benchmark and validation-scheme settings."""
 
     svc_C: float = 1.0  # noqa: N815 - sklearn parameter name
     svc_power: float = 0.5
@@ -230,7 +230,7 @@ class BenchmarkParams:
 
 @dataclass(frozen=True)
 class TuningParams:
-    """Hyperparameter search spaces and budgets (docs/04 section 7)."""
+    """Hyperparameter search spaces and budgets."""
 
     linear_C: tuple[float, ...] = (1.0, 3.0, 10.0, 30.0, 100.0)  # noqa: N815 - sklearn name
     powers: tuple[float, ...] = (0.0, 0.25, 0.5)
@@ -242,7 +242,7 @@ class TuningParams:
             "num_leaves": (15, 31, 63),
             "max_depth": (-1, 6, 8, 12),
             "min_child_samples": (1, 2, 3, 5, 10, 20),
-            # No 0: without L2 a one-row class gets exploding leaf values (D29).
+            # No 0: without L2 a one-row class gets exploding leaf values.
             "reg_lambda": (1.0, 2.0, 5.0),
             "colsample_bytree": (0.3, 0.5, 0.8),
             "subsample": (0.7, 0.8, 1.0),
@@ -268,9 +268,9 @@ class TuningParams:
 
 @dataclass(frozen=True)
 class AgentParams:
-    """Explanation agent settings (DECISIONS.md D25).
+    """Explanation agent settings (the only part of the package that uses the network).
 
-    The relay forwards requests to Claude with the project owner's key held
+    The relay forwards requests to Claude with the author's key held
     server-side, so graders need no key. A grader's own ``ANTHROPIC_API_KEY``
     takes precedence; without either, the deterministic offline engine answers.
     """

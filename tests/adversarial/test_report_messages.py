@@ -13,7 +13,7 @@ def test_extra_columns_message_is_capped_like_row_lists(service):
     data = csv_text([ROW_A + ["1"] * len(extras)], header=HEADER + extras).encode("utf-8")
     result = service.predict_file(data, "wide.csv")
     issue = next(i for i in result.report.issues if i.code == "EXTRA_COLUMNS_IGNORED")
-    assert len(issue.message) < MESSAGE_LIMIT  # today: about 34,000 characters
+    assert len(issue.message) < MESSAGE_LIMIT  # uncapped, it would be about 34,000 characters
 
 
 def test_raw_training_file_metrics_warn_that_rows_were_seen_in_training(service, settings):

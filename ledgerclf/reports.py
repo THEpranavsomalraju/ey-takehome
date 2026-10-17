@@ -1,4 +1,4 @@
-"""Report files and the report manifest (docs/02 section 7).
+"""Report files and the report manifest.
 
 Every table or chart the dashboard and notebooks show comes from a file
 under ``reports/``, listed in ``reports/manifest.json`` with a title, the
@@ -60,7 +60,7 @@ def write_json(
     path = settings.paths.reports / file
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(to_jsonable(payload), indent=2, sort_keys=True, allow_nan=False)
-    path.write_text(text + "\n", encoding="utf-8")
+    path.write_text(text + "\n", encoding="utf-8", newline="\n")
     register(settings, file, title, producer, description, sorted(str(k) for k in payload))
     return path
 
@@ -111,7 +111,9 @@ def register(
     manifest = {"reports": [entries[name] for name in sorted(entries)]}
     path = settings.paths.reports / MANIFEST_NAME
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def read_manifest(settings: Settings) -> list[dict[str, Any]]:

@@ -1,7 +1,7 @@
-"""AmountFlags follows docs/04 section 4 (``is_round = x % 10 == 0``) at extreme magnitudes.
+"""AmountFlags keeps its rule (``is_round = x % 10 == 0``) at extreme magnitudes.
 
-The cents cast to int64 overflows above about 9.2e16, which emits a numpy
-RuntimeWarning to the user's console and yields a platform-dependent flag.
+A cents cast to int64 would overflow above about 9.2e16, emitting a numpy
+RuntimeWarning to the user's console and yielding a platform-dependent flag.
 Amounts below half a cent count as round because they round to 0 cents.
 """
 

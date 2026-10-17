@@ -1,4 +1,4 @@
-"""PredictionService: the facade the dashboard and the agent use (docs/02 section 8).
+"""PredictionService: the single facade the dashboard and the agent use.
 
 Stateless per call: every prediction stands alone, and the loaded bundle is
 read-only, so dashboard reruns and concurrent requests are safe.
@@ -163,7 +163,7 @@ class PredictionService:
         """Validate and predict an uploaded file.
 
         Before the single holdout evaluation has run, holdout rows get
-        predictions but their labels stay unread (CLAUDE.md rule 1), wherever
+        predictions but their labels stay unread (only evaluate-holdout reads them), wherever
         they appear. Labeled training rows are scored with an in-sample caveat.
 
         Args:
@@ -202,7 +202,7 @@ class PredictionService:
             return self._known
 
     def _holdout_fingerprints(self) -> frozenset[str] | None:
-        """Fingerprints from the label-free holdout features file (CLAUDE.md rule 1)."""
+        """Fingerprints from the label-free holdout features file; the labeled file stays closed."""
         paths, limits = self.settings.paths, self.settings.limits
         if (paths.reports / HOLDOUT_EVALUATION_REPORT).exists():
             return frozenset()

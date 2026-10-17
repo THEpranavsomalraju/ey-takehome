@@ -1,7 +1,7 @@
 """Command-line interface: ``python -m ledgerclf <command>``.
 
 The only module allowed to print. Output is ASCII-only so that it works on
-any console encoding (docs/05 section 5.5). Exit codes: 0 success, 1 user
+any console encoding, including cp1252 on Windows. Exit codes: 0 success, 1 user
 input error, 2 artifact or environment error, 3 internal error.
 """
 
@@ -219,7 +219,7 @@ COMMANDS: dict[str, tuple[str, Handler]] = {
     "select": ("champion decision, calibration, thresholds, flag policy", _cmd_select),
     "train": ("final fit on the training portion, artifacts, golden files", _cmd_train),
     "evaluate-holdout": (
-        "single holdout evaluation (ask the project owner first)",
+        "single holdout evaluation (run once, after selection is final)",
         _cmd_evaluate_holdout,
     ),
     "predict": ("predict an Excel or CSV file", _cmd_predict),

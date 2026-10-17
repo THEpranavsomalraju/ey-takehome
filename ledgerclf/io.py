@@ -1,4 +1,4 @@
-"""File reading for every supported format (docs/05 section 2.1 to 2.3), plus file utilities.
+"""File reading for every supported format (Excel and CSV), plus file utilities.
 
 The format comes from the file bytes first and the extension second, so a
 CSV saved with an ``.xlsx`` name still reads. Every cell comes back as a raw
@@ -347,7 +347,7 @@ def _parse_sheets(
 
 
 class _DebugLog:
-    """File-like sink that sends xlrd's console messages to the debug log (CLAUDE.md rule 11)."""
+    """File-like sink that routes xlrd's console messages to the debug log (no prints)."""
 
     def write(self, text: str) -> int:
         """Log one chunk of xlrd output."""

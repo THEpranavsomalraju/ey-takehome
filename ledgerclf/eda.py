@@ -1,4 +1,4 @@
-"""Exploratory analysis tables (docs/04 section 15, ``reports/eda``).
+"""Exploratory analysis tables (``reports/eda``).
 
 Pure functions return DataFrames or dicts. Label-free structure (schema
 audit, Col2 type mix and patterns) uses the full raw file; everything that
@@ -376,7 +376,7 @@ def duplicates_summary(frame: pd.DataFrame, y: np.ndarray, groups: np.ndarray) -
         "rows_in_groups_with_copies": int(group_sizes[group_sizes > 1].sum()),
         "label_conflict_groups": int((labels_per_group > 1).sum()),
         "group_key": "Col1, Col3, Col4, Col5 (monthly period), Col6, Col7; "
-        "Col2 excluded (D02, D22)",
+        "Col2 excluded (copies differ only by invoice number)",
     }
 
 
@@ -472,7 +472,7 @@ EDA_CATALOG: dict[str, tuple[str, str]] = {
     "eda/amount_outliers.csv": (
         "Amount outliers (IQR on signed log)",
         "Rows outside 1.5 x IQR fences of the signed-log amount. Kept in training because "
-        "they look like real ledger values (D07).",
+        "they look like real ledger values, and inference never drops rows.",
     ),
     "eda/period_by_class.csv": (
         "Posting period by class",

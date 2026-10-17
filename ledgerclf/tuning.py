@@ -1,4 +1,4 @@
-"""Logged hyperparameter searches and nested CV (finishing item B, docs/04 section 7).
+"""Logged hyperparameter searches and nested CV.
 
 Every search uses grouped 5-fold CV with the groups passed to ``fit``,
 scores accuracy (the rubric metric) and logs macro_f1_5 beside it, and writes

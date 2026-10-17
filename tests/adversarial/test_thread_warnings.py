@@ -1,8 +1,8 @@
-"""Concurrent predictions must not leak suppressed library warnings (docs/05 E10, section 5.6).
+"""Concurrent predictions must not leak suppressed library warnings (edge case E10).
 
-``warnings.catch_warnings`` in ledgerclf/models.py swaps the process-wide filter
-list, so it is not thread-safe: under concurrent calls the scikit-learn
-"X does not have valid feature names" warning escapes to the console.
+``warnings.catch_warnings`` swaps the process-wide filter list, so it is not
+thread-safe: relying on it under concurrent calls would let the scikit-learn
+"X does not have valid feature names" warning escape to the console.
 """
 
 from __future__ import annotations

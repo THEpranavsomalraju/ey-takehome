@@ -2,7 +2,8 @@
 
 Every scheme runs on training rows only. Each fold refits the whole model
 pipeline (features included) on its training rows, so no statistic from a
-test fold reaches the model (CLAUDE.md rules 2 and 3).
+test fold reaches the model. Every CV is grouped, so duplicate rows never
+straddle a fold boundary.
 """
 
 from __future__ import annotations
@@ -42,7 +43,7 @@ _PROBABILITY_FLOOR = CalibrationParams().probability_floor
 def compute_metrics(
     y_true: np.ndarray, y_pred: np.ndarray, proba: np.ndarray | None = None
 ) -> dict[str, float]:
-    """Compute the metrics of docs/04 section 14.
+    """Compute the classification and probability metrics.
 
     Args:
         y_true: True canonical labels.
@@ -162,8 +163,8 @@ class FoldOutput:
 class CVResult:
     """Cross-validation result with out-of-fold predictions per seed.
 
-    Accuracy mean and std come from the individual folds (docs/04 section 8:
-    "mean and std over 3 seeds, 15 folds"). The other metrics are computed on
+    Accuracy mean and std come from the individual folds (3 seeds x 5 folds,
+    15 folds in all). The other metrics are computed on
     the pooled out-of-fold predictions of each seed, then averaged over
     seeds, because rare classes are too thin inside a single fold.
     """
