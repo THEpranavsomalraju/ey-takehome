@@ -2,11 +2,19 @@
 
 Living log. Updated after every gate run and every session. Format rules: docs/06 section 10.
 
+## Status summary (2026-10-17, midday)
+
+- **Model:** trained on the 90% training portion (5,309 rows). Champion: log-odds blend p0.25 (logistic + LightGBM). Grouped CV accuracy 0.9539, macro F1 (5 classes) 0.7475, out-of-time 0.9403, nested CV 0.9548 +- 0.005. Temperature 1.39 (ECE 0.019 -> 0.0066), review threshold 0.8. Fallback logistic: 0.9513.
+- **Holdout:** untouched. Evaluation waits for the owner's approval.
+- **Backend:** validation and prediction service, exact explanations, row-level holdout label guard (D35), Claude agent live through the relay and direct key (D32), FastAPI server, packaging with secret scan. Gate PASS.
+- **Docs:** README, MODEL_CARD, notebooks 01 to 03 (executed), DECISIONS D00 to D37.
+- **Reviews:** cycle 2 complete (code review C1 W11, leakage C1 W2, edge round 3 C3 W8): every Critical and Warning fixed with tests.
+- **Next:** dashboard UI (frontend/dist), holdout evaluation (after approval), notebook 03 holdout section, clean-room run (tools/clean_room.py), CI on GitHub (optional, needs a push).
+- **Open questions for the owner:** holdout approval; include `.claude/`, `CLAUDE.md`, `PROGRESS.md` in the ZIP (`--with-dev-notes`); D34.
+
 ## Current phase
 
-Block E: AI agent, relay, API server (Part 2 backend). Status: IN PROGRESS
-
-Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay, and API server.
+Block F: dashboard UI, holdout evaluation, packaging. Status: IN PROGRESS (backend complete)
 
 ## Phase status overview
 
@@ -19,9 +27,9 @@ Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay,
 | 4 | Models, CV runner, benchmark | DONE | c1c54e3 |
 | 5 | Tuning, blend, selection, calibration (items A to D) | DONE | see git log "feat: logged tuning" |
 | 6 | Final training, artifacts, explanations | DONE | see git log "feat: logged tuning" |
-| 7 | Prediction service and robustness | DONE (edge-case breaker round 2 pending) | see git log "feat: logged tuning" |
-| 8 | Modeling notebook, docs, holdout evaluation | NOT STARTED (holdout waits for user approval) | |
-| 9 | Clean room, cross-platform, packaging, final review | NOT STARTED | |
+| 7 | Prediction service and robustness | DONE (edge rounds 2 and 3 fixed) | de92b14, 98fa943 |
+| 8 | Modeling notebook, docs, holdout evaluation | IN PROGRESS (notebook 03, README, model card done; holdout waits for approval) | 98fa943 |
+| 9 | Clean room, cross-platform, packaging, final review | IN PROGRESS (package_submission.py done, ZIP verified clean) | |
 
 ## Finishing items
 
@@ -107,6 +115,8 @@ Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay,
 | A1 | 2026-10-17 | full PASS 22s | 6 (code) + 9 (edge) | 11 (code) + 3 (leakage) + 14 (edge) | 9 + 3 | Block A review round: every Critical and Warning fixed (details below) |
 | B1 | 2026-10-17 | full PASS 33s | 0 (leakage) | 3 (leakage) | 1 | Block B leakage audit: all fixed. Code review round interrupted by a usage limit; rerun with block C/D |
 | CD1 | 2026-10-17 | full PASS 134s | - | - | - | Phases 4 to 7 built; 431 tests; review round next |
+| E1 | 2026-10-17 | full PASS 124s | 2 (edge) | 9 (edge) | - | Edge round 2: index columns, upload types, AmountFlags, explain by row_number, CLI codes, holdout guard by row, thread-safe LightGBM; commit de92b14 |
+| E2 | 2026-10-17 | fast PASS 43s | 1 (code) + 1 (leakage) + 3 (edge) | 11 + 2 + 8 | 12 + 4 + 7 | Cycle 2: guard on model inputs from the features file, fail closed; agent grounding, tool errors, what_if parity; server JSON errors; damaged workbooks; relay hardening; all fixed; commit 98fa943 |
 
 ## Findings during block C/D
 

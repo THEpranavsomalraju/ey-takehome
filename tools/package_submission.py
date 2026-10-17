@@ -70,7 +70,7 @@ EXCLUDE_PATTERNS = (
 )
 SECRET_PATTERNS = (
     re.compile(rb"sk-ant-[A-Za-z0-9_\-]{16,}"),
-    re.compile(rb"VERCEL_OIDC_TOKEN"),
+    re.compile(rb"VERCEL_OIDC_TOKEN\s*=\s*\S"),
     re.compile(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
 )
 

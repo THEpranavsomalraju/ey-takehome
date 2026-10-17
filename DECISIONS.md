@@ -367,7 +367,7 @@ Relay safeguards: shared token header, fixed model, output cap 4,000 tokens, the
 
 Alternatives: shipping a key in the ZIP (exposes the key); requiring the grader's key (most graders would see only the offline engine); a local model (large download, slow on CPU, unreliable tool use); LangChain (adds dependencies without changing the key or network problem).
 
-Evidence: tests/integration/test_agent_and_server.py (scripted fake client: tool loop, grounding rejection, refusal, truncation, turn limit, client failure, connection resolution order); relay checked live: health OK, 401 without token, unknown tool rejected, request forwarded to Anthropic.
+Evidence: tests/integration/test_agent_and_server.py (scripted fake client: tool loop, grounding rejection, refusal, truncation, turn limit, client failure, connection resolution order); relay checked live: health OK, 401 without token, unknown tool rejected, request forwarded to Anthropic. Live end to end (2026-10-17, after the owner supplied a key that needs no workspace header): three holdout-feature rows explained by claude-haiku-5-5, two through the hardened relay and one direct, 3 to 5 s each, every cited number grounded, no fallback. Hardening after the code review: the relay rejects requests unless they carry exactly the four agent tools and the agent's system prompt (sha256 checked; a test keeps the hash in sync), forwards only whitelisted fields, and refuses to run without RELAY_TOKEN.
 
 ## D33. Layering of the report writer
 
