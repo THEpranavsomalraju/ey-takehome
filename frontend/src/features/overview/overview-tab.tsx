@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react"
 
 import { Panel, Section } from "@/components/blocks"
+import { CategoryCards } from "@/components/category-guide"
+import { Term } from "@/components/term"
+import { CATEGORY_CAVEAT } from "@/lib/categories"
+import { IntroCard } from "./intro-card"
 import { cn } from "@/lib/utils"
 import { ClassDistributionPanel, DuplicateStats, MonthlyVolumePanel, SignalPanel } from "./data-panels"
 import { ConfusionPanel, HeadlineStats, PerClassPanel } from "./holdout-panels"
@@ -65,8 +69,13 @@ export function OverviewTab() {
           id="results"
           eyebrow="Results"
           title="An invoice classifier that knows when to ask for help"
-          description="The model suggests one of six categories for every accounts payable line, says how sure it is, and sends uncertain or unfamiliar lines to a person. The holdout figures come from 590 rows that were never used during development; the expected accuracy is the cross-validation estimate."
+          description={
+            <>
+              The model suggests one of six categories for every accounts payable line, says how sure it is, and sends uncertain or unfamiliar lines to a person. The <Term name="holdout" /> figures come from 590 lines never used during development; the expected accuracy is the <Term name="grouped cross-validation" /> estimate.
+            </>
+          }
         >
+          <IntroCard />
           <HeadlineStats />
         </Section>
 
@@ -80,11 +89,19 @@ export function OverviewTab() {
             <ClassDistributionPanel />
             <MonthlyVolumePanel />
           </div>
+          <Panel
+            title="What each category looks like"
+            description={CATEGORY_CAVEAT}
+            why="The category names are hidden, so these profiles are the best description of what the model is choosing between. Hover a category anywhere in the Classify tab to see its profile."
+          >
+            <CategoryCards />
+          </Panel>
           <div className="grid gap-4 lg:grid-cols-2">
             <SignalPanel />
             <Panel
               title="Repeated rows"
-              description="Rows identical on every model input except the invoice number."
+              description="Invoice lines that are exact copies of an earlier line, apart from the invoice number."
+              why="If one copy is used for training and another for testing, the test is too easy. This is why every test keeps copies together."
               takeaway="A quarter of the rows repeat an earlier row exactly, and copies almost always share a label. The model can learn these patterns, but testing must keep copies apart (next section)."
             >
               <DuplicateStats />

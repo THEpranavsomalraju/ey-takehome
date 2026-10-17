@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from "recharts"
+import { Term } from "@/components/term"
 
 import { ChartSkeleton, LoadError, Panel, Segmented, SeriesLegend } from "@/components/blocks"
 import { DotPlot } from "@/components/dot-plot"
@@ -40,7 +41,8 @@ export function CalibrationPanel() {
   return (
     <Panel
       title="Does 90% confident mean 90% right?"
-      description="Out-of-fold accuracy per confidence bin. Points on the dashed diagonal are perfectly calibrated."
+      description={<>Across: how sure the model said it was. Up: how often it was actually right. Points on the dashed line are perfectly honest (<Term name="calibration" />).</>}
+      why="Review decisions rely on confidence. If 90% did not mean 90%, sending work to people by confidence would be unreliable."
       action={
         <Segmented
           label="Calibration stage"
@@ -155,7 +157,8 @@ export function ThresholdPanel() {
   return (
     <Panel
       title="Review threshold explorer"
-      description="Rows below the threshold go to a person. Drag to see the trade-off (out-of-fold, 5,309 rows)."
+      description={<>Drag the slider to choose the <Term name="review threshold" />: lines below it go to a person. Figures are from cross-validation on 5,309 lines.</>}
+      why="It shows the business trade-off directly: more automation, or higher accuracy on the lines the model decides alone."
       takeaway={
         chosen
           ? `The chosen threshold (${chosen.threshold.toFixed(2)}) is the lowest one at which the automatically decided rows reach the accuracy target. ${pct(1 - chosen.coverage, 0)} of rows go to review, and those rows are only ${pct(chosen.flagged, 0)} accurate, so review effort lands where the model is weak.`
@@ -284,7 +287,8 @@ export function FlagReliabilityPanel() {
   return (
     <Panel
       title="How reliable is each warning?"
-      description="Accuracy of the rows carrying each flag. Flags whose rows are clearly less accurate send the row to review."
+      description="How accurate the model is on the lines that carry each warning. Warnings marked review send the line to a person."
+      why="It shows that the warnings mean something: flagged lines really are riskier, so reviewing them catches mistakes."
       action={
         <Segmented
           label="Data"

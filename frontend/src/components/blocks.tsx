@@ -12,14 +12,19 @@ import { cn } from "@/lib/utils"
 export function Panel({
   title,
   description,
+  why,
   action,
   takeaway,
   children,
   className,
 }: {
   title: string
+  /** What the chart shows, in plain words. */
   description?: ReactNode
+  /** Why the chart is useful to look at. */
+  why?: ReactNode
   action?: ReactNode
+  /** What the data in the chart tells us. */
   takeaway?: ReactNode
   children: ReactNode
   className?: string
@@ -33,10 +38,21 @@ export function Panel({
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {children}
-        {takeaway && (
-          <p className="mt-auto border-t pt-3 text-xs leading-relaxed text-muted-foreground">
-            {takeaway}
-          </p>
+        {(why || takeaway) && (
+          <div className="mt-auto space-y-1.5 border-t pt-3 text-xs leading-relaxed text-muted-foreground">
+            {why && (
+              <p>
+                <span className="font-medium text-foreground">Why it matters: </span>
+                {why}
+              </p>
+            )}
+            {takeaway && (
+              <p>
+                <span className="font-medium text-foreground">Finding: </span>
+                {takeaway}
+              </p>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

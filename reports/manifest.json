@@ -209,6 +209,30 @@
       "columns": [
         "class",
         "rows",
+        "share",
+        "vendors",
+        "top_vendor",
+        "top_vendor_share",
+        "accounts",
+        "top_account",
+        "top_account_share",
+        "top_doc_flag",
+        "top_doc_flag_share",
+        "amount_median",
+        "credit_share",
+        "first_month",
+        "last_month",
+        "peak_month"
+      ],
+      "description": "What each anonymized category looks like in the training rows: size, top vendor and GL account with their shares, document flag, median amount, credit share, and months.",
+      "file": "eda/category_profiles.csv",
+      "producer": "eda",
+      "title": "Category profiles"
+    },
+    {
+      "columns": [
+        "class",
+        "rows",
         "share"
       ],
       "description": "Rows and share per class in the training portion.",

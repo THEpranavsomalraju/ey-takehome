@@ -411,6 +411,59 @@ def rare_class_rows(frame: pd.DataFrame, y: np.ndarray) -> pd.DataFrame:
     return table.sort_values(["class", COL_VENDOR, ROW_ID]).reset_index(drop=True)
 
 
+def category_profiles(frame: pd.DataFrame, y: np.ndarray) -> pd.DataFrame:
+    """Return what each category looks like in the training rows.
+
+    The labels are anonymized, so a category's meaning can only be described
+    by its data: how common it is, how concentrated its vendors and accounts
+    are, its document flags, amounts, and posting months.
+
+    Args:
+        frame: Coerced training rows.
+        y: Their canonical labels.
+
+    Returns:
+        One row per category with counts, top values and their shares, the
+        median amount, the share of credits (negative amounts), and months.
+    """
+    rows = [_profile(frame[y == label], label, len(y)) for label in CANONICAL_CLASSES]
+    return pd.DataFrame(rows)
+
+
+def _top(values: pd.Series) -> tuple[str, float]:
+    counts = values.fillna(MISSING_TOKEN).value_counts()
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], str(item[0])))
+    return (str(ordered[0][0]), ordered[0][1] / len(values)) if ordered else ("", 0.0)
+
+
+def _profile(rows: pd.DataFrame, label: str, total: int) -> dict[str, Any]:
+    vendor, vendor_share = _top(rows[COL_VENDOR])
+    account, account_share = _top(rows[COL_ACCOUNT])
+    doc, doc_share = _top(rows[COL_DOC_TYPE])
+    amounts = rows[AMOUNT].dropna()
+    periods = [int(p) for p in rows[PERIOD].dropna()]
+    counts = {p: periods.count(p) for p in sorted(set(periods))}
+    peak = max(counts, key=lambda p: (counts[p], -p)) if counts else None
+    return {
+        "class": label,
+        "rows": len(rows),
+        "share": len(rows) / total,
+        "vendors": int(rows[COL_VENDOR].nunique()),
+        "top_vendor": vendor,
+        "top_vendor_share": vendor_share,
+        "accounts": int(rows[COL_ACCOUNT].nunique()),
+        "top_account": account,
+        "top_account_share": account_share,
+        "top_doc_flag": doc,
+        "top_doc_flag_share": doc_share,
+        "amount_median": float(amounts.median()) if len(amounts) else None,
+        "credit_share": float((amounts < 0).mean()) if len(amounts) else None,
+        "first_month": period_label(min(periods)) if periods else None,
+        "last_month": period_label(max(periods)) if periods else None,
+        "peak_month": period_label(peak) if peak is not None else None,
+    }
+
+
 def accuracy_ceiling(frame: pd.DataFrame, y: np.ndarray) -> dict[str, Any]:
     """Return the best accuracy any model could reach on identical-input conflicts."""
     result: dict[str, Any] = {}
@@ -443,6 +496,11 @@ EDA_CATALOG: dict[str, tuple[str, str]] = {
     "eda/class_distribution.csv": (
         "Class distribution",
         "Rows and share per class in the training portion.",
+    ),
+    "eda/category_profiles.csv": (
+        "Category profiles",
+        "What each anonymized category looks like in the training rows: size, top vendor and "
+        "GL account with their shares, document flag, median amount, credit share, and months.",
     ),
     "eda/missing_values.csv": (
         "Missing values",
@@ -572,6 +630,7 @@ def _builders(
         "eda/duplicate_group_sizes.csv": lambda: duplicate_group_sizes(groups),
         "eda/conflict_groups.csv": lambda: conflict_groups(frame, y, groups),
         "eda/rare_class_rows.csv": lambda: rare_class_rows(frame, y),
+        "eda/category_profiles.csv": lambda: category_profiles(frame, y),
         "eda/accuracy_ceiling.json": lambda: accuracy_ceiling(frame, y),
     }
 

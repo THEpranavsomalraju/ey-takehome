@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { ClassLabel } from "@/components/blocks"
+import { CategoryHint } from "@/components/category-guide"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -236,7 +237,9 @@ function ResultRow({
       <TableCell className="max-w-40 truncate" title={row.Col6 ?? ""}>{row.Col6 ?? "-"}</TableCell>
       <TableCell className="hidden text-muted-foreground xl:table-cell">{row.Col7 ?? "-"}</TableCell>
       <TableCell>
-        <ClassLabel label={row.predicted_label} />
+        <CategoryHint label={row.predicted_label}>
+          <ClassLabel label={row.predicted_label} />
+        </CategoryHint>
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts"
+import { Term } from "@/components/term"
 
 import { ChartSkeleton, ClassLegend, LoadError, Panel, Segmented, Stat } from "@/components/blocks"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
@@ -18,7 +19,8 @@ export function ClassDistributionPanel() {
   return (
     <Panel
       title="Category balance"
-      description="Training rows per category (holdout excluded)."
+      description="How many past invoice lines carry each category (training rows only)."
+      why={<>It shows how lopsided the data is. A lazy model that always answers Category_1 would already look 88% accurate while never finding a rare category, so models are also judged on <Term name="macro F1" />.</>}
       action={
         <Segmented
           label="Axis scale"
@@ -100,7 +102,8 @@ export function MonthlyVolumePanel() {
   return (
     <Panel
       title="When each category occurs"
-      description={view === "rare" ? "Training rows per posting month; months without a rare-category row are left out." : "Training rows per posting month."}
+      description={view === "rare" ? "Invoice lines per posting month for the four rare categories (months without one are left out)." : "Invoice lines per posting month, coloured by category."}
+      why={<>If a category depends on timing, the posting month is a useful input, and the model must also be tested on later months (the <Term name="out-of-time" />).</>}
       action={
         <Segmented
           label="Categories shown"
@@ -145,6 +148,18 @@ export function MonthlyVolumePanel() {
   )
 }
 
+// Report variable names (e.g. "Col1+Col6 pair") in business terms.
+const INPUT_NAMES: Record<string, string> = {
+  "Col1 vendor": "Vendor",
+  "Col6 account": "GL account",
+  "Col1+Col6 pair": "Vendor + GL account",
+  "Col7 doc type": "Document flag",
+  "Col5 period": "Posting month",
+  "Col3 amount decile": "Amount (size band)",
+  "Col4 description": "Description",
+}
+const inputName = (variable: string) => INPUT_NAMES[variable] ?? variable
+
 type InfoRow = { variable: string; mutual_information_nats: number; normalized_mutual_information: number }
 type CramerRow = Record<string, string | number> & { variable: string }
 
@@ -154,11 +169,11 @@ export function SignalPanel() {
   const [measure, setMeasure] = useState<"cramer" | "mi">("cramer")
   const rows = useMemo(() => {
     if (measure === "mi") {
-      return (info.data?.rows ?? []).map((r) => ({ name: r.variable, value: asNumber(r.mutual_information_nats) }))
+      return (info.data?.rows ?? []).map((r) => ({ name: inputName(r.variable), value: asNumber(r.mutual_information_nats) }))
     }
     return (cramer.data?.rows ?? [])
       .filter((r) => r.variable !== "label")
-      .map((r) => ({ name: r.variable, value: asNumber(r.label) }))
+      .map((r) => ({ name: inputName(r.variable), value: asNumber(r.label) }))
       .sort((a, b) => b.value - a.value)
   }, [measure, info.data, cramer.data])
   const loading = !info.data || !cramer.data
@@ -166,10 +181,13 @@ export function SignalPanel() {
     <Panel
       title="Which inputs carry the label"
       description={
-        measure === "cramer"
-          ? "Cramer's V with the label: 0 = no association, 1 = the input decides the label."
-          : "Mutual information with the label, in nats (higher = more information)."
+        measure === "cramer" ? (
+          <>How strongly each input is linked to the category, as <Term name="Cramer's V" />: 0 = no link, 1 = the input decides the category.</>
+        ) : (
+          <>How much each input tells us about the category, as <Term name="mutual information" /> (higher = more).</>
+        )
       }
+      why="It shows which columns the model should lean on, and which add little on their own."
       action={
         <Segmented
           label="Association measure"

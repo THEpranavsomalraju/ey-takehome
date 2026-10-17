@@ -47,6 +47,21 @@ export function ClassifyTab() {
           </p>
         </div>
         <UploadPanel busy={busy} onFile={onFile} onSample={onSample} />
+        <ol className="grid gap-3 sm:grid-cols-3">
+          {[
+            ["Upload", "Any ledger file with the columns Col1 to Col7, or the holdout sample. It is checked and every line is classified in well under a second."],
+            ["Review", "See how many lines were decided automatically and which need a person. Filter by category, warning, or confidence."],
+            ["Explain", "Click a line to see what drove its category, which past invoices support it, and a plain-language explanation from the AI agent."],
+          ].map(([title, text], i) => (
+            <li key={title} className="space-y-1 rounded-lg border p-3">
+              <p className="text-sm font-medium">
+                <span className="tabular mr-2 text-muted-foreground">{i + 1}</span>
+                {title}
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{text}</p>
+            </li>
+          ))}
+        </ol>
       </div>
     )
   }

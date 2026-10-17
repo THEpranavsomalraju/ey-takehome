@@ -5,8 +5,6 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import type { Insights } from "@/lib/api"
 import { CLASS_COLORS, flagLabel, num, pct } from "@/lib/domain"
 
-const clickHint = "Click a bar to filter the table; click again to clear."
-
 export function PredictedClassesChart({
   insights,
   selected,
@@ -18,7 +16,11 @@ export function PredictedClassesChart({
 }) {
   const data = insights.by_class.filter((r) => r.rows > 0)
   return (
-    <Panel title="Predicted categories" description={clickHint}>
+    <Panel
+      title="Predicted categories"
+      description="How many lines in this file went to each category. Click a bar to show only those lines in the table."
+      why="A quick check that the mix looks sensible for the ledger you uploaded."
+    >
       <ChartContainer config={{ rows: { label: "Rows" } }} className="h-[200px] w-full">
         <BarChart data={data} layout="vertical" margin={{ left: 4, right: 56 }}>
           <CartesianGrid horizontal={false} stroke="var(--grid)" />
@@ -69,7 +71,8 @@ export function ConfidenceChart({ insights }: { insights: Insights }) {
   return (
     <Panel
       title="How confident the model is"
-      description={`Rows per confidence level, automatic and review side by side (square-root scale). Below ${pct(insights.threshold, 0)} (dashed line) a row always goes to review; warnings can send confident rows too.`}
+      description={`How sure the model is across this file: lines per confidence level, automatic and review side by side (square-root scale, dashed line = ${pct(insights.threshold, 0)} threshold).`}
+      why="It shows how much of the file can be trusted automatically and how much needs a person."
     >
       <ChartContainer
         config={{
@@ -128,7 +131,11 @@ export function FlagsChart({
 }) {
   const data = insights.flags.map((f) => ({ ...f, name: flagLabel(f.flag) }))
   return (
-    <Panel title="Warnings raised" description={data.length ? clickHint : undefined}>
+    <Panel
+      title="Warnings raised"
+      description="Which warnings fired in this file and how often. Click a bar to show only those lines."
+      why="It points reviewers to the lines with new vendors, new accounts, or low confidence first."
+    >
       {data.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">No warnings: every input looked familiar.</p>
       ) : (

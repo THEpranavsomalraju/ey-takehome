@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
+import { Term } from "@/components/term"
 
 import { ChartSkeleton, LoadError, Panel, Segmented, SeriesLegend } from "@/components/blocks"
 import { DotPlot } from "@/components/dot-plot"
@@ -51,7 +52,8 @@ export function ValidationPanel() {
   return (
     <Panel
       title="How the score depends on the test design"
-      description="Accuracy of the same model under four ways of holding out test rows."
+      description="The same model's accuracy under four different ways of testing it."
+      why={<>A score is only as honest as the test behind it. This shows how much a careless random test would flatter the model, and how it holds up on new vendors and later months. The one we report is <Term name="grouped cross-validation" />.</>}
       action={
         <Select value={model} onValueChange={setModel}>
           <SelectTrigger size="sm" className="w-48 text-xs" aria-label="Model">
@@ -109,7 +111,8 @@ export function LeaderboardPanel() {
   return (
     <Panel
       title="Model comparison"
-      description="Every model on the same grouped folds (3 seeds × 5 folds). Lines show ±1 standard deviation (accuracy: over folds; macro F1: over seeds)."
+      description={<>Each candidate model's score on identical tests. The dot is the average; the line shows how much it varies between test runs. Switch between <Term name="accuracy" />, <Term name="macro F1" />, and <Term name="recall" /> for one category.</>}
+      why={<>It shows that the chosen model (highlighted) wins fairly against simple rules and other approaches, not just against the <Term name="baseline" />.</>}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
@@ -188,7 +191,8 @@ export function AblationPanel() {
   return (
     <Panel
       title="What each input is worth"
-      description="Change in the score when one input group is removed (or added) from the logistic model."
+      description={<>How much the score changes when one group of inputs is taken away (or added). This is an <Term name="ablation" />, run with the logistic model.</>}
+      why="It tells us which information the model really relies on, so useful inputs are kept and noise is left out."
       action={
         <Segmented
           label="Metric"
@@ -271,7 +275,8 @@ export function ClassWeightPanel() {
   return (
     <Panel
       title="Class weights: rare-category recall against false alarms"
-      description="Weight per category = (largest class / class size) ^ power. 0 = no weighting, 1 = fully balanced."
+      description={<>Scores as the model is told to pay more attention to rare categories (<Term name="class weights" />): 0 = no extra attention, 1 = every category weighted equally.</>}
+      why="It shows the trade-off that was tuned: finding rare categories without raising false alarms on ordinary invoices."
       action={
         <Segmented
           label="Metric"

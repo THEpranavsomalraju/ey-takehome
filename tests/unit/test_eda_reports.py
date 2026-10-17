@@ -118,3 +118,16 @@ def test_report_writers_and_loader(tmp_path):
     entries = read_manifest(custom)
     assert [e["file"] for e in entries] == ["x/data.json", "x/table.csv"]
     assert entries[1]["columns"] == ["b"]
+
+
+def test_category_profiles_describe_every_category(settings):
+    from ledgerclf.eda import category_profiles
+    from ledgerclf.labels import CANONICAL_CLASSES
+    from ledgerclf.splitting import load_training_frame
+
+    data = load_training_frame(settings)
+    profiles = category_profiles(data.frame, data.y).set_index("class")
+    assert list(profiles.index) == list(CANONICAL_CLASSES)
+    assert profiles["rows"].sum() == len(data.y)
+    assert profiles.loc["Category_5", "credit_share"] == 1.0
+    assert profiles.loc["Category_4", "top_doc_flag"] == "Doc3"

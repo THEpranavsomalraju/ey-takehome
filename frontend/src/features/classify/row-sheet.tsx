@@ -4,6 +4,8 @@ import { AlertTriangleIcon, ChevronDownIcon, SparklesIcon, WandSparklesIcon } fr
 import { toast } from "sonner"
 
 import { ClassLabel, Segmented } from "@/components/blocks"
+import { CategoryHint } from "@/components/category-guide"
+import { Term } from "@/components/term"
 import { Markdown } from "@/components/markdown"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -88,7 +90,9 @@ function PredictionHeader({ payload }: { payload: ExplanationPayload }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xl font-semibold tracking-tight">
-          <ClassLabel label={p.label} />
+          <CategoryHint label={p.label}>
+            <ClassLabel label={p.label} />
+          </CategoryHint>
         </span>
         <span className="tabular text-xl text-muted-foreground">{pct(p.probability)}</span>
         {p.review_required ? (
@@ -198,7 +202,7 @@ function DriversSection({ payload }: { payload: ExplanationPayload }) {
         <div>
           <h3 className="text-sm font-medium">What drove the prediction</h3>
           <p className="text-xs text-muted-foreground">
-            Exact contribution of each input, in log-odds of {label} versus {runner_up.label}. Blue supports {label}, red pulls toward {runner_up.label}.
+            How much each input pushed the decision, in <Term name="log-odds" /> of {label} versus {runner_up.label}. Blue supports {label}, red pulls toward {runner_up.label}. A reviewer should check the longest bars first.
           </p>
         </div>
         <Segmented
@@ -253,7 +257,7 @@ function DriversSection({ payload }: { payload: ExplanationPayload }) {
         </div>
       </div>
       <p className="text-xs text-muted-foreground">
-        The base rate is how common {label} is compared with {runner_up.label}. Inputs plus base rate equal the model's margin exactly.
+        The <Term name="base rate" /> is how common {label} is compared with {runner_up.label}. Inputs plus base rate equal the model's margin exactly.
       </p>
     </section>
   )
@@ -286,7 +290,7 @@ function EvidenceSection({ payload }: { payload: ExplanationPayload }) {
   return (
     <section className="space-y-2">
       <h3 className="text-sm font-medium">Evidence from past invoices</h3>
-      <p className="text-xs text-muted-foreground">How training invoices with the same values were labeled.</p>
+      <p className="text-xs text-muted-foreground">How past invoices with the same values were labeled. A high share means the history backs this prediction; "new" means the model has no history for that value.</p>
       <Table className="text-xs">
         <TableHeader>
           <TableRow>

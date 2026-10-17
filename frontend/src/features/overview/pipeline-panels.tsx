@@ -1,4 +1,5 @@
 import { ArrowRightIcon, FileSpreadsheetIcon, GaugeIcon, LayersIcon, ShieldCheckIcon, SparklesIcon } from "lucide-react"
+import { Term } from "@/components/term"
 
 import { ChartSkeleton, LoadError, Panel, Stat } from "@/components/blocks"
 import { Card, CardContent } from "@/components/ui/card"
@@ -102,7 +103,8 @@ export function FeatureCatalogPanel() {
   return (
     <Panel
       title="Feature pipeline"
-      description={`One scikit-learn pipeline, fitted only on training rows, used identically for uploads. ${num(total)} features with single words; the final model adds word pairs.`}
+      description={<>Every group of inputs the model computes from a spreadsheet row, and how many numbers each produces ({num(total)} with single words; the final model adds word pairs). Text uses <Term name="TF-IDF" />.</>}
+      why="It documents exactly what the model sees, and that the same steps run for training and for every uploaded file."
     >
       {(catalog.error || space.error) && <LoadError error={(catalog.error ?? space.error) as Error} />}
       {loading ? (

@@ -220,6 +220,25 @@ export function ModelSheet() {
                 </section>
                 <Separator />
                 <section className="space-y-2">
+                  <p className="font-medium">Hyperparameters</p>
+                  <p className="text-xs text-muted-foreground">
+                    Chosen by logged grid and random searches on grouped folds, then by a decision rule fixed in advance.
+                  </p>
+                  <ParamList title="Logistic regression" params={{ ...(active.linear as object), class_weight_power: active.class_weight_power, ngram_range: (active.features as { ngram_range?: number[] })?.ngram_range?.join("-") }} />
+                  {"tree" in active && active.tree ? (
+                    <>
+                      <ParamList title="LightGBM" params={active.tree as Record<string, unknown>} />
+                      <ParamList title="Blend" params={{ linear_weight: active.linear_weight, temperature: active.temperature }} />
+                    </>
+                  ) : (
+                    <ParamList title="Calibration" params={{ temperature: active.temperature }} />
+                  )}
+                  <a href="/docs" target="_blank" rel="noreferrer" className="inline-block text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground">
+                    Open the API documentation
+                  </a>
+                </section>
+                <Separator />
+                <section className="space-y-2">
                   <p className="font-medium">Library versions</p>
                   <dl className="grid grid-cols-[9rem_1fr] gap-y-1 text-xs">
                     {Object.entries(info.library_versions).map(([k, v]) => (
@@ -236,5 +255,22 @@ export function ModelSheet() {
         </div>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function ParamList({ title, params }: { title: string; params: Record<string, unknown> }) {
+  const entries = Object.entries(params).filter(([, v]) => v !== undefined && v !== null)
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium">{title}</p>
+      <dl className="grid grid-cols-[9rem_1fr] gap-y-0.5 text-xs">
+        {entries.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="font-mono text-[11px] text-muted-foreground">{k}</dt>
+            <dd className="tabular">{typeof v === "number" ? Number(v.toFixed(4)) : String(v)}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   )
 }

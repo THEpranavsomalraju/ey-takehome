@@ -1,6 +1,7 @@
 import { useState } from "react"
 
 import { AgentBadge, ModelSheet, SettingsPopover } from "@/components/app-header"
+import { GuideSheet } from "@/components/guide-sheet"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ClassifyTab } from "@/features/classify/classify-tab"
 import { OverviewTab } from "@/features/overview/overview-tab"
@@ -28,6 +29,7 @@ export default function App() {
           </TabsList>
           <div className="flex items-center gap-2">
             <AgentBadge />
+            <GuideSheet />
             <ModelSheet />
             <SettingsPopover />
           </div>
