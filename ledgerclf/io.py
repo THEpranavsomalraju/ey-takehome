@@ -578,6 +578,15 @@ def write_xlsx_deterministic(frame: pd.DataFrame, path: Path, sheet_name: str = 
             target.writestr(info, payload)
 
 
+def sha256_text_file(path: Path) -> str:
+    """Return the hex SHA-256 of a text file, reading Windows line endings as Unix ones.
+
+    Git on Windows and some editors rewrite LF as CRLF without changing the
+    content; the hash of a CSV must not depend on that.
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def sha256_file(path: Path) -> str:
     """Return the hex SHA-256 of a file.
 

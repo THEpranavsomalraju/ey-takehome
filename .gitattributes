@@ -1,0 +1,2 @@
+# Keep every file byte-for-byte as committed: split and golden files are verified by hash.
+* -text

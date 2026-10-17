@@ -24,7 +24,7 @@ from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
 from ledgerclf.config import HOLDOUT_FEATURES_STEM, HoldoutRule, Limits, Paths, Settings
 from ledgerclf.exceptions import ConfigError, HoldoutAccessError, SchemaError
-from ledgerclf.io import read_table, sha256_file, write_xlsx_deterministic
+from ledgerclf.io import read_table, sha256_file, sha256_text_file, write_xlsx_deterministic
 from ledgerclf.labels import CANONICAL_CLASSES, normalize_labels
 from ledgerclf.schema import (
     AMOUNT,
@@ -410,7 +410,7 @@ def _build_manifest(
         },
         "period_range": [period_label(int(periods.min())), period_label(int(periods.max()))],
         "raw_data_sha256": sha256_file(settings.paths.raw_data),
-        "holdout_row_ids_sha256": sha256_file(ids_path),
+        "holdout_row_ids_sha256": sha256_text_file(ids_path),
         "sklearn_version": sklearn.__version__,
     }
 
@@ -440,16 +440,16 @@ def load_split(paths: Paths) -> SplitResult:
             code="SPLIT_MISSING",
         )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    _verify_hash(ids_path, manifest["holdout_row_ids_sha256"])
-    _verify_hash(paths.raw_data, manifest["raw_data_sha256"])
+    _verify_hash(sha256_text_file(ids_path), ids_path, manifest["holdout_row_ids_sha256"])
+    _verify_hash(sha256_file(paths.raw_data), paths.raw_data, manifest["raw_data_sha256"])
     holdout_ids = pd.read_csv(ids_path, encoding="utf-8")[ROW_ID].to_numpy(dtype=np.int64)
     total = int(manifest["rows"]["total"])
     train_ids = np.setdiff1d(np.arange(total), holdout_ids)
     return SplitResult(train_ids, np.sort(holdout_ids), manifest)
 
 
-def _verify_hash(path: Path, expected: str) -> None:
-    if sha256_file(path) != expected:
+def _verify_hash(actual: str, path: Path, expected: str) -> None:
+    if actual != expected:
         raise ConfigError(
             f"{path.name} does not match the hash recorded in split_manifest.json. The raw data "
             "or the split changed after the split was made. Restore the original files from "

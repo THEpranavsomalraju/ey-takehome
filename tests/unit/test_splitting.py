@@ -97,10 +97,10 @@ def test_seed_rule_raises_when_unsatisfiable(labeled_raw):
 
 
 def test_split_files_match_manifest_hash(settings):
-    from ledgerclf.io import sha256_file
+    from ledgerclf.io import sha256_file, sha256_text_file
 
     manifest = json.loads((settings.paths.splits / MANIFEST_FILE).read_text(encoding="utf-8"))
-    assert manifest["holdout_row_ids_sha256"] == sha256_file(
+    assert manifest["holdout_row_ids_sha256"] == sha256_text_file(
         settings.paths.splits / HOLDOUT_IDS_FILE
     )
     assert manifest["raw_data_sha256"] == sha256_file(settings.paths.raw_data)
@@ -260,3 +260,12 @@ def test_training_frame_carries_no_label_column(training):
     assert LABEL_COLUMN not in training.frame.columns
     assert LABEL_COLUMN not in training.raw.columns
     assert (training.raw["source_row"].to_numpy() == training.frame["source_row"].to_numpy()).all()
+
+
+def test_split_hash_ignores_windows_line_endings(settings, tmp_path):
+    from ledgerclf.io import sha256_text_file
+
+    original = settings.paths.splits / HOLDOUT_IDS_FILE
+    converted = tmp_path / HOLDOUT_IDS_FILE
+    converted.write_bytes(original.read_bytes().replace(b"\n", b"\r\n"))
+    assert sha256_text_file(converted) == sha256_text_file(original)
