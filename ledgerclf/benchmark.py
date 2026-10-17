@@ -8,6 +8,7 @@ from a full run.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -19,6 +20,7 @@ import pandas as pd
 from ledgerclf.config import FeatureParams, Settings
 from ledgerclf.evaluation import (
     CVResult,
+    HoldOutResult,
     accuracy_by_pair_seen,
     grouped_splits,
     random_splits,
@@ -38,7 +40,7 @@ from ledgerclf.models import (
     make_lookup,
     make_probability_blend,
 )
-from ledgerclf.reports import write_json, write_table
+from ledgerclf.reports import write_reports
 from ledgerclf.splitting import TrainingData, load_training_frame, out_of_time_mask, vendor_groups
 
 logger = logging.getLogger(__name__)
@@ -79,7 +81,7 @@ def model_zoo(settings: Settings) -> dict[str, Any]:
         "dummy_majority": make_dummy(),
         "lookup_vendor_account": make_lookup(),
         "complement_nb": make_complement_nb(bench.nb_alpha),
-        "linear_svc": make_linear_svc(bench.svc_C, bench.svc_power, seed),
+        "linear_svc": make_linear_svc(bench.svc_C, bench.svc_power, seed, bench.svc_max_iter),
         "logistic_p0": make_logistic(linear0),
         "logistic_p05": make_logistic(linear05),
         "lightgbm_leaf20": make_lightgbm(bench.leaf20_tree, seed),
@@ -145,8 +147,6 @@ def leaderboard_tables(
 
 
 def _catboost_row(path: Path) -> pd.DataFrame:
-    import json
-
     payload = json.loads(path.read_text(encoding="utf-8"))
     return pd.DataFrame(
         [
@@ -287,11 +287,14 @@ def run_validation_schemes(
             if scheme == "grouped CV (primary)":
                 pair_tables.append(accuracy_by_pair_seen(result, data.frame, data.y, splits, seed))
         held = run_train_test(estimator, data.frame, data.y, oot_mask)
-        rows.append(
-            _scheme_row(name, "out-of-time (train <= 2018-09)", held.metrics, held.test_rows)
-        )
+        rows.append(_scheme_row(name, oot_scheme_name(settings), held.metrics, held.test_rows))
         oot_detail[name] = _oot_detail(held, data, oot_mask)
     return pd.DataFrame(rows), oot_detail, pd.concat(pair_tables, ignore_index=True)
+
+
+def oot_scheme_name(settings: Settings) -> str:
+    """Return the out-of-time scheme label, for example ``out-of-time (train <= 2018-09)``."""
+    return f"out-of-time (train <= {settings.oot_cutoff[:7]})"
 
 
 def _scheme_row(model: str, scheme: str, metrics: dict[str, float], rows: int) -> dict[str, Any]:
@@ -305,7 +308,7 @@ def _scheme_row(model: str, scheme: str, metrics: dict[str, float], rows: int) -
     }
 
 
-def _oot_detail(held: Any, data: TrainingData, train_mask: np.ndarray) -> dict[str, Any]:
+def _oot_detail(held: HoldOutResult, data: TrainingData, train_mask: np.ndarray) -> dict[str, Any]:
     y_test = data.y[~train_mask]
     return {
         "train_rows": held.train_rows,
@@ -384,10 +387,4 @@ def run_benchmark(settings: Settings, quick: bool = False) -> list[str]:
         "benchmark/oot_detail.json": oot_detail | {"quick_mode": quick, "seeds": list(plan.seeds)},
         "benchmark/unseen_pair_accuracy.csv": pairs,
     }
-    for file, (title, description) in BENCHMARK_REPORTS.items():
-        result = outputs[file]
-        if isinstance(result, pd.DataFrame):
-            write_table(settings, file, result, title, PRODUCER, description)
-        else:
-            write_json(settings, file, result, title, PRODUCER, description)
-    return list(BENCHMARK_REPORTS)
+    return write_reports(settings, BENCHMARK_REPORTS, outputs, PRODUCER)

@@ -27,6 +27,9 @@ EXIT_INTERNAL_ERROR = 3
 EXCEL_SERIAL_RANGE = (20_000, 80_000)
 VALID_YEARS = (1900, 2200)
 MONTHS_PER_YEAR = 12
+UTF16_SAMPLE_BYTES = 400  # BOM-less UTF-16 sniffing: bytes inspected
+UTF16_NUL_SHARE = 0.9  # share of NUL bytes in the high-byte positions of ASCII text
+UTF16_TEXT_SHARE = 0.1  # maximum NUL share in the character positions
 
 HOLDOUT_FEATURES_STEM = "holdout_features"
 
@@ -157,6 +160,18 @@ class CalibrationParams:
     threshold_candidates: tuple[float, ...] = (0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 0.95, 0.97, 0.99)
     target_kept_accuracy: float = 0.975
     default_threshold: float = 0.9
+    probability_floor: float = 1e-15
+
+
+@dataclass(frozen=True)
+class EdaParams:
+    """Sizes of the EDA and preprocessing report tables."""
+
+    top_values: int = 20
+    histogram_bins: int = 30
+    iqr_multiplier: float = 1.5
+    amount_deciles: int = 10
+    sample_rows: int = 5
 
 
 @dataclass(frozen=True)
@@ -208,6 +223,7 @@ class BenchmarkParams:
     quick_dial_powers: tuple[float, ...] = (0.0, 0.5, 1.0)
     quick_leaf_sizes: tuple[int, ...] = (2, 20)
     cv_jobs: int = 5
+    svc_max_iter: int = 10_000
 
 
 @dataclass(frozen=True)
@@ -243,6 +259,30 @@ class TuningParams:
     quick_tree_trials: int = 8
     quick_blend_weights: tuple[float, ...] = (0.4, 0.5, 0.6)
     quick_nested_tree_trials: int = 3
+    quick_ngram_ranges: tuple[tuple[int, int], ...] = ((1, 1),)
+    nested_ngram_ranges: tuple[tuple[int, int], ...] = ((1, 1),)
+    quick_nested_blend_weights: tuple[float, ...] = (0.5,)
+
+
+@dataclass(frozen=True)
+class AgentParams:
+    """Explanation agent settings (DECISIONS.md D25).
+
+    The relay forwards requests to Claude with the project owner's key held
+    server-side, so graders need no key. A grader's own ``ANTHROPIC_API_KEY``
+    takes precedence; without either, the deterministic offline engine answers.
+    """
+
+    model: str = "claude-haiku-5-5"
+    effort: str = "low"
+    max_turns: int = 6
+    max_tokens: int = 4000
+    timeout_seconds: float = 25.0
+    similar_rows: int = 5
+    # The relay holds the key; this shared token only keeps casual scanners out.
+    relay_url: str = "https://ledgerclf-agent-relay.vercel.app/api"
+    relay_token: str = "69ffdcce74916b566ca3c2004eeab862"
+    percent_tolerance: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -260,6 +300,7 @@ class Settings:
     calibration: CalibrationParams = field(default_factory=CalibrationParams)
     explain: ExplainParams = field(default_factory=ExplainParams)
     flag_policy: FlagPolicyParams = field(default_factory=FlagPolicyParams)
+    agent: AgentParams = field(default_factory=AgentParams)
     benchmark: BenchmarkParams = field(default_factory=BenchmarkParams)
     tuning: TuningParams = field(default_factory=TuningParams)
     seeds: tuple[int, ...] = (0, 1, 2)

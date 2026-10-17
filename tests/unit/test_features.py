@@ -6,6 +6,7 @@ import pytest
 import scipy.sparse as sp
 from sklearn.base import clone
 
+from ledgerclf.exceptions import ConfigError
 from ledgerclf.features import (
     DEFAULT_TRANSFORMERS,
     EXPLANATION_GROUPS,
@@ -152,7 +153,7 @@ def test_ablation_subsets_and_additions(training, settings):
     extended = build_feature_pipeline(settings.feature, [*DEFAULT_TRANSFORMERS, "col2_format"])
     extended.fit(training.frame)
     assert "Col2" in feature_groups(extended.get_feature_names_out())
-    with pytest.raises(ValueError, match="Unknown transformers"):
+    with pytest.raises(ConfigError, match="Unknown transformers"):
         build_feature_pipeline(settings.feature, ["nope"])
 
 

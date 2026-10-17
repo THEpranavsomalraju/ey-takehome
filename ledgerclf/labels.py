@@ -20,6 +20,8 @@ CANONICAL_CLASSES: tuple[str, ...] = (
 )
 FIVE_CLASSES: tuple[str, ...] = tuple(c for c in CANONICAL_CLASSES if c != "Category_5")
 MAJORITY_CLASS = "Category_1"
+COMMON_CLASSES: tuple[str, ...] = ("Category_1", "Category_2")
+RARE_CLASSES: tuple[str, ...] = tuple(c for c in CANONICAL_CLASSES if c not in COMMON_CLASSES)
 
 _LABEL_PATTERN = re.compile(r"^category(\d+)$", re.ASCII)
 

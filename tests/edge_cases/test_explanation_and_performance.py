@@ -122,3 +122,25 @@ def test_p04_one_explanation_within_budget(service, holdout_result):
         service.explain(holdout_result, row)
         timings.append(time.perf_counter() - started)
     assert float(np.median(timings)) < 0.3 * SLACK
+
+
+@pytest.mark.parametrize("bundle_file", ["model_champion.joblib", "model_fallback.joblib"])
+def test_x05_production_bundles_are_additive_for_every_class(settings, training, bundle_file):
+    from ledgerclf.artifacts import load_bundle
+    from ledgerclf.models import softmax
+    from tests.conftest import process
+
+    bundle = load_bundle(bundle_file, settings.paths)
+    features = bundle.pipeline.named_steps["features"]
+    model = bundle.pipeline.named_steps["model"]
+    holdout, _, _ = process(settings.paths.holdout / "holdout_features.xlsx", "h.xlsx")
+    rows = np.random.default_rng(settings.random_state).choice(
+        len(training.frame), 200, replace=False
+    )
+    for frame in (holdout, training.frame.iloc[np.sort(rows)]):
+        parts = model.contributions(features.transform(frame))
+        reconstructed = parts.values.sum(axis=2) + parts.bias
+        np.testing.assert_allclose(reconstructed, parts.logits, atol=1e-6)
+        np.testing.assert_allclose(
+            softmax(parts.logits), bundle.pipeline.predict_proba(frame), atol=1e-9
+        )

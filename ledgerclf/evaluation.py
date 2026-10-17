@@ -28,16 +28,15 @@ from sklearn.metrics import (
 
 from ledgerclf.calibration import brier_score, expected_calibration_error
 from ledgerclf.config import CalibrationParams
-from ledgerclf.features import normalize_text
-from ledgerclf.labels import CANONICAL_CLASSES, FIVE_CLASSES, MAJORITY_CLASS
+from ledgerclf.labels import CANONICAL_CLASSES, FIVE_CLASSES, MAJORITY_CLASS, RARE_CLASSES
 from ledgerclf.models import ABSENT_CLASS_LOGIT, to_canonical
+from ledgerclf.reference import pair_key
 from ledgerclf.schema import COL_ACCOUNT, COL_VENDOR
 from ledgerclf.splitting import grouped_cv, random_cv, small_class_warning_suppressed
 
 logger = logging.getLogger(__name__)
 
-RARE_CLASSES = ("Category_3", "Category_4", "Category_5", "Category_6")
-_PROBABILITY_FLOOR = 1e-15
+_PROBABILITY_FLOOR = CalibrationParams().probability_floor
 
 
 def compute_metrics(
@@ -309,7 +308,9 @@ def run_train_test(
 
 def pair_seen_mask(frame: pd.DataFrame, train_idx: np.ndarray, test_idx: np.ndarray) -> np.ndarray:
     """Return True for test rows whose vendor-account pair appears in the training rows."""
-    pairs = frame[COL_VENDOR].map(normalize_text) + " || " + frame[COL_ACCOUNT].map(normalize_text)
+    pairs = pd.Series(
+        [pair_key(v, a) for v, a in zip(frame[COL_VENDOR], frame[COL_ACCOUNT], strict=True)]
+    )
     known = set(pairs.iloc[train_idx])
     return np.asarray(pairs.iloc[test_idx].isin(known))
 

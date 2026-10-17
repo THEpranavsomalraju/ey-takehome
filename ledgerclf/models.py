@@ -34,6 +34,7 @@ from ledgerclf.config import (
     LinearParams,
     TreeParams,
 )
+from ledgerclf.exceptions import ConfigError
 from ledgerclf.features import DEFAULT_TRANSFORMERS, build_feature_pipeline, normalize_text
 from ledgerclf.labels import CANONICAL_CLASSES, MAJORITY_CLASS
 from ledgerclf.schema import COL_ACCOUNT, COL_VENDOR
@@ -57,7 +58,9 @@ def quiet_feature_name_check() -> Iterator[None]:
     LightGBM 4.6 reports generic feature names (``Column_0`` ...) after fitting
     on a sparse matrix, so sklearn warns on every prediction from a sparse
     matrix. The matrix always comes from the same fitted pipeline, so the
-    warning carries no information.
+    warning carries no information. ``catch_warnings`` is not thread-safe, so
+    the blend's prediction and contribution paths call the LightGBM booster
+    directly (no sklearn name check); only benchmark wrappers use this.
     """
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", message="X does not have valid feature names")
@@ -204,7 +207,11 @@ class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
         if self.tree_ is not None and [str(c) for c in self.linear_.classes_] != [
             str(c) for c in self.tree_.classes_
         ]:
-            raise ValueError("Blend members learned different class orders.")
+            raise ConfigError(
+                "Blend members learned different class orders; refit the model with: "
+                "python -m ledgerclf train",
+                code="BLEND_CLASS_ORDER",
+            )
         self.classes_ = np.asarray(CANONICAL_CLASSES, dtype=object)
         return self
 
@@ -218,8 +225,7 @@ class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
         linear = to_canonical(self.linear_.decision_function(X), classes, ABSENT_CLASS_LOGIT)
         if self.tree_ is None:
             return linear, np.zeros_like(linear)
-        with quiet_feature_name_check():
-            raw = self.tree_.estimator_.predict(X, raw_score=True)
+        raw = self.tree_.estimator_.booster_.predict(X, raw_score=True)
         tree = to_canonical(np.asarray(raw), classes, ABSENT_CLASS_LOGIT)
         return linear, tree
 
@@ -288,8 +294,7 @@ def _linear_contributions(
 
 
 def _tree_contributions(model: Any, matrix: sp.csr_matrix) -> tuple[np.ndarray, np.ndarray]:
-    with quiet_feature_name_check():
-        raw = model.predict(matrix, pred_contrib=True)
+    raw = model.booster_.predict(matrix, pred_contrib=True)
     classes, features = model.classes_, matrix.shape[1]
     if isinstance(raw, list):
         per_class = [np.asarray(sp.csr_matrix(block).toarray()) for block in raw]
@@ -484,9 +489,9 @@ def make_complement_nb(alpha: float) -> Pipeline:
     return Pipeline([("features", features), ("model", ComplementNB(alpha=alpha))])
 
 
-def make_linear_svc(C: float, power: float, random_state: int) -> Pipeline:
+def make_linear_svc(C: float, power: float, random_state: int, max_iter: int) -> Pipeline:
     """Return a linear SVM (predictions from ``decision_function``; no probabilities)."""
-    model = PoweredClassWeight(LinearSVC(C=C, random_state=random_state, max_iter=10_000), power)
+    model = PoweredClassWeight(LinearSVC(C=C, random_state=random_state, max_iter=max_iter), power)
     return Pipeline([("features", build_feature_pipeline(FeatureParams())), ("model", model)])
 
 

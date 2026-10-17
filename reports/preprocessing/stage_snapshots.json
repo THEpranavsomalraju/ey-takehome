@@ -52,17 +52,33 @@
       "text_truncated": 0
     },
     "rows": 5309,
-    "scope": "training portion"
+    "scope": "training portion after validation and cleaning"
+  },
+  "engineered": {
+    "features_per_transformer": {
+      "amount": 1,
+      "amount_flags": 2,
+      "col1_tokens": 536,
+      "col1_value": 194,
+      "col4_tokens": 1491,
+      "col6_tokens": 274,
+      "col6_value": 138,
+      "col7": 4,
+      "pair": 392,
+      "period": 1
+    },
+    "non_finite_values": 0,
+    "scope": "output of each transformer before concatenation"
   },
   "matrix": {
     "density": 0.005550360612281665,
     "features": 3033,
     "format": "scipy CSR (sparse)",
     "rows": 5309,
-    "scope": "training portion",
+    "scope": "training portion, input to every model",
     "stored_values": 89373
   },
-  "resolved": {
+  "raw": {
     "blank_cells": {
       "Col1": 0,
       "Col2": 0,
@@ -114,6 +130,6 @@
       }
     },
     "rows": 5309,
-    "scope": "training portion, original cells"
+    "scope": "training portion, original cells as read from the file"
   }
 }

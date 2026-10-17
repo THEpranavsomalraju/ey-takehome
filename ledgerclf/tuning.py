@@ -22,7 +22,7 @@ from ledgerclf.config import FeatureParams, LinearParams, Settings, TreeParams
 from ledgerclf.evaluation import compute_metrics
 from ledgerclf.labels import FIVE_CLASSES
 from ledgerclf.models import make_blend, make_lightgbm, make_logistic
-from ledgerclf.reports import write_json, write_table
+from ledgerclf.reports import write_reports
 from ledgerclf.splitting import (
     TrainingData,
     grouped_cv,
@@ -68,8 +68,10 @@ class SearchSpace:
     nested_tree_trials: int
     nested_blend_weights: tuple[float, ...]
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-safe description of the space."""
+    def to_dict(self, settings: Settings) -> dict[str, Any]:
+        """Return a JSON-safe description of the space and its CV schemes."""
+        seed, folds, inner = settings.random_state, settings.cv_folds, settings.nested_inner_folds
+        splitter = "StratifiedGroupKFold({n}, shuffle=True, random_state={s})"
         return {
             "linear": {
                 "C": list(self.linear_C),
@@ -79,19 +81,20 @@ class SearchSpace:
             "tree": {
                 "space": {k: list(v) for k, v in self.tree_space.items()},
                 "random_trials": self.tree_trials,
-                "random_state": 0,
+                "random_state": seed,
             },
             "blend": {"linear_weight": list(self.blend_weights), "power": list(self.blend_powers)},
             "nested": {
-                "outer": "StratifiedGroupKFold(5, shuffle=True, random_state=0)",
-                "inner": "StratifiedGroupKFold(3, shuffle=True, random_state=0)",
+                "outer": splitter.format(n=folds, s=seed),
+                "inner": splitter.format(n=inner, s=seed),
                 "linear_C": list(self.nested_linear_C),
                 "linear_power": list(self.nested_linear_powers),
                 "tree_random_trials": self.nested_tree_trials,
                 "blend_weight": list(self.nested_blend_weights),
             },
-            "metric": "accuracy (macro_f1_5 logged beside it)",
-            "cv": "StratifiedGroupKFold(5, shuffle=True, random_state=0) with the group key",
+            "metric": "accuracy (macro_f1_5 logged beside it); trial metrics are means over "
+            "folds, while select reports macro_f1_5 on pooled out-of-fold predictions",
+            "cv": splitter.format(n=folds, s=seed) + " with the group key",
         }
 
 
@@ -102,7 +105,7 @@ def search_space(settings: Settings, quick: bool) -> SearchSpace:
         return SearchSpace(
             tuning.quick_linear_C,
             tuning.quick_powers,
-            ((1, 1),),
+            tuning.quick_ngram_ranges,
             tuning.tree_space,
             tuning.quick_tree_trials,
             tuning.quick_blend_weights,
@@ -110,7 +113,7 @@ def search_space(settings: Settings, quick: bool) -> SearchSpace:
             tuning.quick_linear_C,
             tuning.quick_powers,
             tuning.quick_nested_tree_trials,
-            (0.5,),
+            tuning.quick_nested_blend_weights,
         )
     return SearchSpace(
         tuning.linear_C,
@@ -180,8 +183,6 @@ def _trials(search: Any) -> pd.DataFrame:
 def _short_name(parameter: str) -> str:
     if parameter.endswith("ngram_range"):
         return "ngram_range"
-    if parameter in ("model__linear__power", "model__tree__power"):
-        return "power"
     return parameter.rsplit("__", 1)[-1]
 
 
@@ -357,7 +358,7 @@ def nested_cv(
                 space,
                 linear_C=space.nested_linear_C,
                 linear_powers=space.nested_linear_powers,
-                ngram_ranges=((1, 1),),
+                ngram_ranges=settings.tuning.nested_ngram_ranges,
             ),
             jobs,
         )
@@ -468,17 +469,11 @@ def run_tuning(settings: Settings, quick: bool = False) -> list[str]:
         "quick_mode": quick,
     }
     outputs: dict[str, pd.DataFrame | dict[str, Any]] = {
-        "tuning/search_space.json": space.to_dict() | {"quick_mode": quick},
+        "tuning/search_space.json": space.to_dict(settings) | {"quick_mode": quick},
         "tuning/linear_trials.csv": linear_trials,
         "tuning/tree_trials.csv": tree_trials,
         "tuning/blend_trials.csv": blend_trials,
         "tuning/nested_cv.json": nested,
         "tuning/best_params.json": best.to_dict() | {"quick_mode": quick},
     }
-    for file, (title, description) in TUNING_REPORTS.items():
-        result = outputs[file]
-        if isinstance(result, pd.DataFrame):
-            write_table(settings, file, result, title, PRODUCER, description)
-        else:
-            write_json(settings, file, result, title, PRODUCER, description)
-    return list(TUNING_REPORTS)
+    return write_reports(settings, TUNING_REPORTS, outputs, PRODUCER)

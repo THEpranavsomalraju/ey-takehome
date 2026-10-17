@@ -13,6 +13,7 @@ from enum import StrEnum
 import numpy as np
 import pandas as pd
 
+from ledgerclf.exceptions import ConfigError
 from ledgerclf.features import normalize_text
 from ledgerclf.reference import ReferenceStats, pair_key
 from ledgerclf.schema import (
@@ -103,13 +104,20 @@ class ReviewPolicy:
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> ReviewPolicy:
-        """Rebuild a policy from ``to_dict`` output."""
-        severities = payload["severities"]
-        assert isinstance(severities, dict)
-        return cls(
-            threshold=float(str(payload["threshold"])),
-            severities={str(k): FlagSeverity(str(v)) for k, v in severities.items()},
-        )
+        """Rebuild a policy from ``to_dict`` output; unknown or missing flags keep defaults.
+
+        Raises:
+            ConfigError: When the payload is malformed.
+        """
+        severities = payload.get("severities")
+        threshold = payload.get("threshold")
+        if not isinstance(severities, dict) or not isinstance(threshold, int | float):
+            raise ConfigError(
+                "The review policy in champion.json is malformed. Run: python -m ledgerclf select",
+                code="POLICY_MALFORMED",
+            )
+        loaded = {str(k): FlagSeverity(str(v)) for k, v in severities.items()}
+        return cls(threshold=float(threshold), severities={**DEFAULT_SEVERITIES, **loaded})
 
 
 def _has_known_token(value: object, known: frozenset[str]) -> bool:

@@ -5,6 +5,18 @@
     "logodds_blend_p0.25"
   ],
   "fallback": "logistic_p0",
+  "flag_policy_notes": [
+    "UNSEEN_VENDOR: accuracy 0.896 on 154 rows vs 0.954 overall -> critical",
+    "UNSEEN_ACCOUNT: accuracy 0.893 on 112 rows vs 0.954 overall -> critical",
+    "UNSEEN_VENDOR_ACCOUNT_PAIR: accuracy 0.936 on 377 rows vs 0.954 overall -> warning",
+    "UNSEEN_DOC_TYPE: 0 rows, below 10: keeps default warning",
+    "ALL_TOKENS_UNSEEN: 0 rows, below 10: keeps default critical",
+    "TEXT_MISSING: 0 rows, below 10: keeps default critical",
+    "AMOUNT_IMPUTED: 0 rows, below 10: keeps default critical",
+    "AMOUNT_OUT_OF_RANGE: 0 rows, below 10: keeps default warning",
+    "DATE_IMPUTED: 0 rows, below 10: keeps default critical",
+    "DATE_OUT_OF_RANGE: 0 rows, below 10: keeps default warning"
+  ],
   "rule": {
     "macro_f1_tolerance": 0.03,
     "oot_tolerance": 0.015,

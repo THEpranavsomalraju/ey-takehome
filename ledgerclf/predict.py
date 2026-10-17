@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,8 +28,8 @@ from ledgerclf.flags import (
     flag_strings,
 )
 from ledgerclf.io import ReadInfo, read_table
+from ledgerclf.jsonsafe import to_jsonable
 from ledgerclf.labels import CANONICAL_CLASSES, normalize_labels
-from ledgerclf.reports import to_jsonable
 from ledgerclf.schema import (
     INPUT_COLUMNS,
     LABEL_COLUMN,
@@ -43,6 +44,10 @@ from ledgerclf.schema import (
 )
 
 logger = logging.getLogger(__name__)
+
+LabelScreen = Callable[[pd.DataFrame], tuple[np.ndarray, list[ValidationIssue]]]
+"""Called with the coerced inputs (labels unread) before scoring; returns a mask
+of the rows whose labels must stay unread, plus issues that explain why."""
 
 PROBABILITY_COLUMNS = tuple(f"p_{c}" for c in CANONICAL_CLASSES)
 PREDICTION_COLUMNS = (
@@ -105,6 +110,7 @@ def predict_file(
     file_name: str,
     limits: Limits | None = None,
     fallback_reason: str | None = None,
+    label_screen: LabelScreen | None = None,
 ) -> PredictionResult:
     """Read, validate, and predict a file end to end.
 
@@ -114,6 +120,7 @@ def predict_file(
         file_name: Original file name.
         limits: Input limits (defaults from config).
         fallback_reason: Why the fallback model is active, if it is.
+        label_screen: Optional check that keeps some rows' labels unread.
 
     Returns:
         The prediction result.
@@ -126,7 +133,7 @@ def predict_file(
     started = time.perf_counter()
     raw, info, issues = read_table(source, file_name, limits)
     read_ms = (time.perf_counter() - started) * 1000
-    result = predict_frame(bundle, raw, limits, issues, fallback_reason)
+    result = predict_frame(bundle, raw, limits, issues, fallback_reason, label_screen)
     result.read_info = info
     result.timings_ms = {"read": read_ms, **result.timings_ms}
     result.timings_ms["total"] = (time.perf_counter() - started) * 1000
@@ -139,6 +146,7 @@ def predict_frame(
     limits: Limits,
     read_issues: list[ValidationIssue] | None = None,
     fallback_reason: str | None = None,
+    label_screen: LabelScreen | None = None,
 ) -> PredictionResult:
     """Predict a raw sheet (read with ``header=None``).
 
@@ -148,6 +156,7 @@ def predict_frame(
         limits: Input limits.
         read_issues: Issues already found while reading.
         fallback_reason: Why the fallback model is active, if it is.
+        label_screen: Optional check that keeps some rows' labels unread.
 
     Returns:
         The prediction result.
@@ -156,6 +165,9 @@ def predict_frame(
     resolved, mapping, resolve_issues = resolve_columns(raw, limits)
     frame, coerce_issues = coerce_values(resolved, limits)
     issues = [*(read_issues or []), *resolve_issues, *coerce_issues]
+    if label_screen is not None and LABEL_COLUMN in frame.columns:
+        frame, screen_issues = _screen_labels(frame, label_screen)
+        issues += screen_issues
     validated = time.perf_counter()
     proba = _predict_proba(bundle, frame, limits)
     row_flags = compute_row_flags(frame, bundle.reference)
@@ -196,6 +208,20 @@ def _predict_proba(bundle: ModelBundle, frame: pd.DataFrame, limits: Limits) -> 
         for start in range(0, len(frame), limits.predict_chunk_rows)
     ]
     return np.vstack(chunks)
+
+
+def _screen_labels(
+    frame: pd.DataFrame, label_screen: LabelScreen
+) -> tuple[pd.DataFrame, list[ValidationIssue]]:
+    """Blank the labels the screen withholds; drop the column when none remain."""
+    withheld, issues = label_screen(frame.drop(columns=[LABEL_COLUMN]))
+    if not withheld.any():
+        return frame, issues
+    if withheld.all():
+        return frame.drop(columns=[LABEL_COLUMN]), issues
+    screened = frame.copy()
+    screened.loc[withheld, LABEL_COLUMN] = None
+    return screened, issues
 
 
 def _structure_suspects(frame: pd.DataFrame, issues: list[ValidationIssue]) -> np.ndarray:

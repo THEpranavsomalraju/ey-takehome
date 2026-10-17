@@ -20,25 +20,28 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from ledgerclf.config import FeatureParams
+from ledgerclf.exceptions import ConfigError
 from ledgerclf.schema import (
     AMOUNT,
     COL_ACCOUNT,
+    COL_AMOUNT,
     COL_DESCRIPTION,
     COL_DOC_TYPE,
     COL_INVOICE,
+    COL_PERIOD,
     COL_VENDOR,
     MISSING_TOKEN,
     PERIOD,
 )
 
-GROUP_VENDOR = "Col1"
-GROUP_PAIR = "Col1+Col6"
-GROUP_AMOUNT = "Col3"
-GROUP_DESCRIPTION = "Col4"
-GROUP_PERIOD = "Col5"
-GROUP_ACCOUNT = "Col6"
-GROUP_DOC_TYPE = "Col7"
-GROUP_INVOICE = "Col2"
+GROUP_VENDOR = COL_VENDOR
+GROUP_PAIR = f"{COL_VENDOR}+{COL_ACCOUNT}"
+GROUP_AMOUNT = COL_AMOUNT
+GROUP_DESCRIPTION = COL_DESCRIPTION
+GROUP_PERIOD = COL_PERIOD
+GROUP_ACCOUNT = COL_ACCOUNT
+GROUP_DOC_TYPE = COL_DOC_TYPE
+GROUP_INVOICE = COL_INVOICE
 EXPLANATION_GROUPS: tuple[str, ...] = (
     GROUP_VENDOR,
     GROUP_PAIR,
@@ -120,7 +123,7 @@ def normalize_text(value: object) -> str:
 class ColumnConcat(BaseEstimator, TransformerMixin):
     """Join several text columns into one key, for the vendor-account pair."""
 
-    def __init__(self, separator: str = " || ") -> None:
+    def __init__(self, separator: str = FeatureParams().pair_separator) -> None:
         self.separator = separator
 
     def fit(self, X: Any, y: Any = None) -> ColumnConcat:
@@ -167,6 +170,12 @@ class TrainingMedianImputer(BaseEstimator, TransformerMixin):
         return self.feature_names_in_
 
 
+def signed_log(values: Any) -> np.ndarray:
+    """Return ``sign(x) * log1p(|x|)``: compresses large amounts and keeps credits negative."""
+    array = np.asarray(values, dtype=float)
+    return np.asarray(np.sign(array) * np.log1p(np.abs(array)))
+
+
 class SignedLogAmount(BaseEstimator, TransformerMixin):
     """Compress heavy-tailed amounts with ``sign(x) * log1p(|x|)``, keeping credits negative."""
 
@@ -177,8 +186,7 @@ class SignedLogAmount(BaseEstimator, TransformerMixin):
 
     def transform(self, X: Any) -> np.ndarray:
         """Return the signed log of every value."""
-        array = np.asarray(X, dtype=float)
-        return np.asarray(np.sign(array) * np.log1p(np.abs(array)))
+        return signed_log(X)
 
     def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
         """Return the output feature name."""
@@ -189,7 +197,8 @@ class AmountFlags(BaseEstimator, TransformerMixin):
     """Binary flags: negative amount (credit) and round amount (multiple of the modulus).
 
     Round amounts recur in rare classes (1,680 and 1,500 in Category_3 and
-    Category_4). Rounding to cents first avoids float noise.
+    Category_4). Rounding to cents first avoids float noise; float arithmetic
+    keeps huge amounts exact, and amounts that round to zero cents are not round.
     """
 
     def __init__(self, modulus: float = 10.0) -> None:
@@ -203,8 +212,9 @@ class AmountFlags(BaseEstimator, TransformerMixin):
     def transform(self, X: Any) -> np.ndarray:
         """Return ``[is_negative, is_round]`` for every row."""
         amount = np.asarray(X, dtype=float)[:, 0]
-        cents = np.round(np.abs(amount) * 100).astype(np.int64)
-        is_round = (cents % round(self.modulus * 100) == 0) & (amount != 0)
+        cents = np.round(np.abs(amount) * 100)
+        with np.errstate(invalid="ignore"):
+            is_round = (np.fmod(cents, round(self.modulus * 100)) == 0) & (cents != 0)
         return np.column_stack([amount < 0, is_round]).astype(float)
 
     def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:
@@ -354,7 +364,10 @@ def build_feature_pipeline(
     """
     unknown = sorted(set(transformers) - set(TRANSFORMERS))
     if unknown:
-        raise ValueError(f"Unknown transformers: {', '.join(unknown)}")
+        raise ConfigError(
+            f"Unknown transformers: {', '.join(unknown)}. Use names from features.TRANSFORMERS.",
+            code="UNKNOWN_TRANSFORMER",
+        )
     ordered = [name for name in TRANSFORMERS if name in transformers]
     return ColumnTransformer(
         [_transformer(name, params) for name in ordered],

@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+import pandas as pd
 
 from ledgerclf.artifacts import ModelBundle
 from ledgerclf.config import ExplainParams
@@ -29,10 +30,10 @@ from ledgerclf.features import (
     readable_feature_name,
 )
 from ledgerclf.flags import FLAG_MESSAGES
+from ledgerclf.jsonsafe import to_jsonable
 from ledgerclf.labels import CANONICAL_CLASSES
 from ledgerclf.predict import PredictionResult
 from ledgerclf.reference import PAIR_KEY, ReferenceStats, pair_key
-from ledgerclf.reports import to_jsonable
 from ledgerclf.schema import (
     AMOUNT,
     COL_ACCOUNT,
@@ -40,6 +41,7 @@ from ledgerclf.schema import (
     COL_DOC_TYPE,
     COL_VENDOR,
     INPUT_COLUMNS,
+    ROW_NUMBER,
 )
 from ledgerclf.values import period_label
 
@@ -67,16 +69,29 @@ class ExplanationError(LedgerClfError):
 
 
 def _position(result: PredictionResult, row_number: object) -> int:
+    """Return the table position of ``row_number`` (the row_number column, not the order)."""
+    total = len(result.predictions)
     if isinstance(row_number, bool) or not isinstance(row_number, int | np.integer):
+        raise ExplanationError(f"Row number must be a whole number between 1 and {total}.")
+    position = _locate(result.predictions, int(row_number))
+    if position is None:
         raise ExplanationError(
-            f"Row number must be a whole number between 1 and {len(result.predictions)}."
+            f"Row {row_number} does not exist. Choose a row between 1 and {total}."
         )
-    if not 1 <= int(row_number) <= len(result.predictions):
+    return position
+
+
+def _locate(table: pd.DataFrame, row_number: int) -> int | None:
+    found = np.flatnonzero(table[ROW_NUMBER].to_numpy() == row_number)
+    return int(found[0]) if len(found) else None
+
+
+def _require_same_model(bundle: ModelBundle, result: PredictionResult) -> None:
+    if result.model_used != bundle.name:
         raise ExplanationError(
-            f"Row {row_number} does not exist. "
-            f"Choose a row between 1 and {len(result.predictions)}."
+            f"These predictions came from the {result.model_used} model, but the "
+            f"{bundle.name} model is loaded now. Predict the file again, then explain the row."
         )
-    return int(row_number) - 1
 
 
 def explain_row(bundle: ModelBundle, result: PredictionResult, row_number: int) -> dict[str, Any]:
@@ -91,12 +106,18 @@ def explain_row(bundle: ModelBundle, result: PredictionResult, row_number: int) 
         A JSON-safe payload (schema version 1.0).
 
     Raises:
-        ExplanationError: When the row number is invalid.
+        ExplanationError: When the row number is invalid or another model made the predictions.
     """
     params = ExplainParams()
+    _require_same_model(bundle, result)
     position = _position(result, row_number)
     prediction = result.predictions.iloc[position]
-    row = result.frame.iloc[[position]]
+    frame_position = _locate(result.frame, int(row_number))
+    if frame_position is None:
+        raise ExplanationError(
+            "The predictions no longer match their inputs. Predict the file again."
+        )
+    row = result.frame.iloc[[frame_position]]
     features = bundle.pipeline.named_steps["features"]
     model = bundle.pipeline.named_steps["model"]
     matrix = features.transform(row)
@@ -111,7 +132,7 @@ def explain_row(bundle: ModelBundle, result: PredictionResult, row_number: int) 
     evidence = _evidence(
         row, top, bundle.reference, str(prediction["predicted_label"]), params.evidence_tokens
     )
-    flags = _flags(result, position)
+    flags = _flags(result, frame_position)
     payload = {
         "schema_version": SCHEMA_VERSION,
         "row_number": int(prediction["row_number"]),

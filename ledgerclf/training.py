@@ -36,7 +36,7 @@ from ledgerclf.config import HOLDOUT_FEATURES_STEM, Settings
 from ledgerclf.exceptions import ArtifactError, ConfigError
 from ledgerclf.flags import ReviewPolicy
 from ledgerclf.io import sha256_file
-from ledgerclf.labels import CANONICAL_CLASSES
+from ledgerclf.labels import CANONICAL_CLASSES, FIVE_CLASSES
 from ledgerclf.models import make_blend, make_calibrated_logistic
 from ledgerclf.predict import PROBABILITY_COLUMNS, predict_file
 from ledgerclf.reference import build_reference
@@ -133,7 +133,7 @@ def build_metadata(
 def sample_rows(data: TrainingData) -> pd.DataFrame:
     """Pick one training row per common and rare class for the doctor's self-test."""
     picks = []
-    for cls in ("Category_1", "Category_2", "Category_3", "Category_4", "Category_6"):
+    for cls in FIVE_CLASSES:
         picks.append(int(np.flatnonzero(data.y == cls)[0]))
     rows = data.raw.iloc[picks][list(INPUT_COLUMNS)].copy()
     return rows.map(lambda v: v.isoformat(sep=" ") if hasattr(v, "isoformat") else v)
@@ -196,7 +196,7 @@ def _write_samples(settings: Settings, data: TrainingData, bundles: dict[str, Mo
     resources.mkdir(parents=True, exist_ok=True)
     path = resources / SAMPLE_ROWS_FILE
     sample_rows(data).to_csv(path, index=False, encoding="utf-8", lineterminator="\n")
-    expected = pd.DataFrame({"row_number": np.arange(1, 6)})
+    expected = pd.DataFrame({"row_number": np.arange(1, len(FIVE_CLASSES) + 1)})
     for name, bundle in bundles.items():
         result = predict_file(bundle, path, path.name, settings.limits)
         expected[f"predicted_label_{name}"] = result.predictions["predicted_label"].to_numpy()

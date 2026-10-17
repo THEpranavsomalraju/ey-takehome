@@ -9,21 +9,25 @@ itself lives only in ``features.py``; this module only describes it.
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-from ledgerclf.config import Settings
-from ledgerclf.eda import signed_log
-from ledgerclf.features import TRANSFORMERS, build_feature_pipeline, normalize_text
-from ledgerclf.reports import write_json, write_table
+from ledgerclf.config import EdaParams, Settings
+from ledgerclf.features import TRANSFORMERS, build_feature_pipeline
+from ledgerclf.reports import write_reports
 from ledgerclf.schema import (
     AMOUNT,
+    COL_ACCOUNT,
     COL_AMOUNT,
+    COL_DESCRIPTION,
+    COL_DOC_TYPE,
     COL_INVOICE,
     COL_PERIOD,
+    COL_VENDOR,
     INPUT_COLUMNS,
     PERIOD,
 )
@@ -31,7 +35,6 @@ from ledgerclf.splitting import ROW_ID, TrainingData, load_training_frame
 from ledgerclf.values import is_blank_cell, period_label
 
 PRODUCER = "eda"
-SAMPLE_ROWS = 5
 TRANSFORMER_NOTES: dict[str, tuple[str, str]] = {
     "col1_tokens": (
         "Vendor tokens carry identity; one vectorizer per column keeps roles apart.",
@@ -65,33 +68,54 @@ def _missing_counts(frame: pd.DataFrame) -> dict[str, int]:
     return {str(c): int(frame[c].isna().sum()) for c in frame.columns}
 
 
-def stage_snapshots(settings: Settings, training: TrainingData) -> dict[str, Any]:
-    """Describe rows, columns, missing values, and dtypes at each pipeline stage."""
+@dataclass(frozen=True)
+class FittedFeatures:
+    """The feature pipeline fitted on the training portion, with its matrix."""
+
+    pipeline: Any
+    matrix: sp.csr_matrix
+    transformer_of_column: np.ndarray
+
+
+def fit_features(settings: Settings, training: TrainingData) -> FittedFeatures:
+    """Fit the production feature pipeline once on the training rows."""
     pipeline = build_feature_pipeline(settings.feature)
     matrix = sp.csr_matrix(pipeline.fit_transform(training.frame))
-    coerced = training.frame
-    raw = training.raw
-    missing_raw = {str(c): int(raw[c].map(is_blank_cell).sum()) for c in raw.columns}
+    names = pipeline.get_feature_names_out()
+    return FittedFeatures(pipeline, matrix, np.array([str(n).split("__", 1)[0] for n in names]))
+
+
+def stage_snapshots(fitted: FittedFeatures, training: TrainingData) -> dict[str, Any]:
+    """Describe the data at each stage: raw cells, coerced frame, engineered blocks, matrix."""
+    raw, coerced, matrix = training.raw, training.frame, fitted.matrix
     return {
-        "resolved": {
-            "scope": "training portion, original cells",
+        "raw": {
+            "scope": "training portion, original cells as read from the file",
             "rows": len(raw),
             "columns": list(raw.columns),
-            "blank_cells": missing_raw,
+            "blank_cells": {str(c): int(raw[c].map(is_blank_cell).sum()) for c in raw.columns},
             "python_types": {
                 str(c): dict(Counter(type(v).__name__ for v in raw[c]).most_common())
                 for c in raw.columns
             },
         },
         "coerced": {
-            "scope": "training portion",
+            "scope": "training portion after validation and cleaning",
             "rows": len(coerced),
             "columns": list(coerced.columns),
             "missing": _missing_counts(coerced),
             "dtypes": {str(c): str(t) for c, t in coerced.dtypes.items()},
         },
+        "engineered": {
+            "scope": "output of each transformer before concatenation",
+            "features_per_transformer": {
+                name: int((fitted.transformer_of_column == name).sum())
+                for name in dict.fromkeys(fitted.transformer_of_column)
+            },
+            "non_finite_values": int((~np.isfinite(matrix.data)).sum()),
+        },
         "matrix": {
-            "scope": "training portion",
+            "scope": "training portion, input to every model",
             "rows": matrix.shape[0],
             "features": matrix.shape[1],
             "stored_values": int(matrix.nnz),
@@ -101,47 +125,65 @@ def stage_snapshots(settings: Settings, training: TrainingData) -> dict[str, Any
     }
 
 
-def before_after_samples(settings: Settings, training: TrainingData) -> pd.DataFrame:
-    """Show five training rows at three stages: raw cell, cleaned value, model input."""
-    positions = np.linspace(0, len(training.frame) - 1, SAMPLE_ROWS).astype(int)
-    clip_low, clip_high = training.frame[PERIOD].min(), training.frame[PERIOD].max()
+def before_after_samples(
+    fitted: FittedFeatures, training: TrainingData, count: int
+) -> pd.DataFrame:
+    """Show training rows at three stages: raw cell, cleaned value, model input.
+
+    Model inputs come from the fitted pipeline's own transformers, so this
+    table always matches what the model sees.
+    """
+    positions = np.linspace(0, len(training.frame) - 1, count).astype(int)
     rows = []
     for position in positions:
-        row, raw_row = training.frame.iloc[position], training.raw.iloc[position]
+        row, raw_row = training.frame.iloc[[position]], training.raw.iloc[position]
+        inputs = model_inputs(fitted.pipeline, row)
         for column in INPUT_COLUMNS:
             rows.append(
                 {
-                    ROW_ID: int(row[ROW_ID]),
+                    ROW_ID: int(row[ROW_ID].iloc[0]),
                     "column": column,
                     "raw_value": str(raw_row[column]),
-                    "cleaned_value": "" if row[column] is None else str(row[column]),
-                    "model_input": _model_input(row, column, clip_low, clip_high),
+                    "cleaned_value": ""
+                    if row[column].iloc[0] is None
+                    else str(row[column].iloc[0]),
+                    "model_input": inputs[column],
                 }
             )
     return pd.DataFrame(rows)
 
 
-def _model_input(row: pd.Series, column: str, clip_low: float, clip_high: float) -> str:
-    if column == COL_INVOICE:
-        return "not used by the model (D04)"
-    if column == COL_AMOUNT:
-        value = row[AMOUNT]
-        return f"signed_log={signed_log(np.array([value]))[0]:.4f}, negative={int(value < 0)}"
-    if column == COL_PERIOD:
-        clipped = int(np.clip(row[PERIOD], clip_low, clip_high))
-        return f"period index {clipped} ({period_label(clipped)}), then standardized"
-    return normalize_text(row[column])
+def model_inputs(pipeline: Any, row: pd.DataFrame) -> dict[str, str]:
+    """Describe what each fitted transformer feeds the model for one row (before scaling)."""
+    named = pipeline.named_transformers_
+    text = {
+        column: str(named[name].named_steps["normalize"].transform(row[column])[0])
+        for name, column in (
+            ("col1_tokens", COL_VENDOR),
+            ("col4_tokens", COL_DESCRIPTION),
+            ("col6_tokens", COL_ACCOUNT),
+        )
+    }
+    doc = str(named["col7"].named_steps["normalize"].transform(row[[COL_DOC_TYPE]])[0, 0])
+    log_amount = float(named["amount"][:-1].transform(row[[AMOUNT]])[0, 0])
+    negative, round_ = named["amount_flags"].transform(row[[AMOUNT]])[0]
+    period = int(named["period"][:-1].transform(row[[PERIOD]])[0, 0])
+    return {
+        **text,
+        COL_INVOICE: "not used by the model (D04)",
+        COL_AMOUNT: (
+            f"signed_log={log_amount:.4f}, is_negative={int(negative)}, is_round={int(round_)}"
+        ),
+        COL_PERIOD: f"period index {period} ({period_label(period)}), clipped to training range",
+        COL_DOC_TYPE: doc,
+    }
 
 
-def feature_space_summary(settings: Settings, training: TrainingData) -> pd.DataFrame:
+def feature_space_summary(fitted: FittedFeatures) -> pd.DataFrame:
     """Return features and sparsity per transformer of the fitted pipeline."""
-    pipeline = build_feature_pipeline(settings.feature)
-    matrix = sp.csr_matrix(pipeline.fit_transform(training.frame))
-    names = pipeline.get_feature_names_out()
-    transformers = np.array([str(n).split("__", 1)[0] for n in names])
     rows = []
-    for name in dict.fromkeys(transformers):
-        block = matrix[:, np.flatnonzero(transformers == name)]
+    for name in dict.fromkeys(fitted.transformer_of_column):
+        block = fitted.matrix[:, np.flatnonzero(fitted.transformer_of_column == name)]
         nonzero_per_row = np.diff(block.indptr)
         rows.append(
             {
@@ -174,7 +216,10 @@ def transformer_catalog(settings: Settings) -> dict[str, Any]:
                 "decision": decision,
             }
         )
-    return {"transformers": catalog, "dropped": {"Col2": "Invoice number: display only (D04)."}}
+    return {
+        "transformers": catalog,
+        "dropped": {COL_INVOICE: "Invoice number: display only (D04)."},
+    }
 
 
 def _plain_params(estimator: Any) -> dict[str, Any]:
@@ -214,16 +259,14 @@ def run_preprocessing_reports(settings: Settings) -> list[str]:
         The report paths written, relative to ``reports/``.
     """
     training = load_training_frame(settings)
+    fitted = fit_features(settings, training)
+    settings_rows = EdaParams().sample_rows
     results: dict[str, pd.DataFrame | dict[str, Any]] = {
-        "preprocessing/stage_snapshots.json": stage_snapshots(settings, training),
-        "preprocessing/before_after_samples.csv": before_after_samples(settings, training),
-        "preprocessing/feature_space_summary.csv": feature_space_summary(settings, training),
+        "preprocessing/stage_snapshots.json": stage_snapshots(fitted, training),
+        "preprocessing/before_after_samples.csv": before_after_samples(
+            fitted, training, settings_rows
+        ),
+        "preprocessing/feature_space_summary.csv": feature_space_summary(fitted),
         "preprocessing/transformer_catalog.json": transformer_catalog(settings),
     }
-    for file, (title, description) in PREPROCESSING_CATALOG.items():
-        result = results[file]
-        if isinstance(result, pd.DataFrame):
-            write_table(settings, file, result, title, PRODUCER, description)
-        else:
-            write_json(settings, file, result, title, PRODUCER, description)
-    return list(PREPROCESSING_CATALOG)
+    return write_reports(settings, PREPROCESSING_CATALOG, results, PRODUCER)

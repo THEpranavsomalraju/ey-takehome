@@ -62,7 +62,10 @@ def test_text_open_calls_pass_encoding():
                 continue
             if name == "open" and isinstance(node.func, ast.Attribute) and node.func.attr == "open":
                 owner = ast.unparse(node.func.value)
-                if any(token in owner for token in ("zipfile", "ZipFile", "archive", "Image")):
+                if any(
+                    token in owner
+                    for token in ("zipfile", "ZipFile", "archive", "Image", "webbrowser")
+                ):
                     continue
             if not any(k.arg == "encoding" for k in node.keywords):
                 offenders.append(f"{path.relative_to(ROOT)}:{node.lineno} {name}()")

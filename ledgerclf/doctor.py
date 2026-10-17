@@ -307,9 +307,11 @@ def model_checks(settings: Settings) -> list[CheckResult]:
 
 
 def _self_test(settings: Settings, bundle: object) -> CheckResult:
+    from ledgerclf.artifacts import RETRAIN_FIX
     from ledgerclf.predict import self_test
 
-    fix = "Run: python -m ledgerclf train"
+    fix = RETRAIN_FIX
+
     try:
         matched, total = self_test(settings, bundle)
     except Exception as error:  # boundary: any self-test failure becomes a FAIL check

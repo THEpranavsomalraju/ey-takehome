@@ -229,7 +229,7 @@ def test_search_spaces_and_grids():
         "model__power",
         "model__estimator__num_leaves",
     }
-    assert json.dumps(full.to_dict())
+    assert json.dumps(full.to_dict(settings))
 
 
 def test_tuned_params_round_trip():

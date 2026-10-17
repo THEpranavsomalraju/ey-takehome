@@ -12,6 +12,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from typing import NoReturn
 
 from ledgerclf import __version__
 from ledgerclf.config import (
@@ -22,10 +23,12 @@ from ledgerclf.config import (
     Settings,
     get_settings,
 )
-from ledgerclf.exceptions import ArtifactError, LedgerClfError
+from ledgerclf.exceptions import ArtifactError, FileReadError, LedgerClfError
 from ledgerclf.logging_setup import configure
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_REASON = "final evaluation"  # same text as holdout_eval.DEFAULT_REASON; reruns replace it
 
 Handler = Callable[[argparse.Namespace, Settings], int]
 
@@ -112,12 +115,39 @@ def _cmd_train(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
+def _read_input(path: Path) -> bytes:
+    if not path.is_file():
+        raise FileReadError(
+            f"File not found: {path}. Check the path and try again.", code="FILE_NOT_FOUND"
+        )
+    return path.read_bytes()
+
+
+def _write_output(target: str, text: str, encoding: str) -> None:
+    """Write a command's output file, turning folder and permission problems into user errors."""
+    path = Path(target)
+    if not path.parent.is_dir():
+        raise FileReadError(
+            f"Output folder not found: {path.parent}. Create it or choose another --out path.",
+            code="OUTPUT_FOLDER_MISSING",
+        )
+    try:
+        path.write_text(text, encoding=encoding, newline="")
+    except OSError as error:
+        raise FileReadError(
+            f"Could not write {path}: {error.strerror}. Close the file if it is open in "
+            "another program, or choose another --out path.",
+            code="OUTPUT_NOT_WRITABLE",
+        ) from error
+    echo(f"Wrote {path}")
+
+
 def _cmd_predict(args: argparse.Namespace, settings: Settings) -> int:
     from ledgerclf.service import PredictionService
 
     service = PredictionService.load(auto_train=False, settings=settings)
     path = Path(args.file)
-    result = service.predict_file(path.read_bytes() if path.is_file() else b"", path.name)
+    result = service.predict_file(_read_input(path), path.name)
     summary = result.summary()
     echo(
         f"Model: {summary['model_used']}"
@@ -134,8 +164,7 @@ def _cmd_predict(args: argparse.Namespace, settings: Settings) -> int:
             f"{result.metrics['accuracy']:.4f}"
         )
     if args.out:
-        result.predictions.to_csv(args.out, index=False, encoding="utf-8-sig")
-        echo(f"Wrote {args.out}")
+        _write_output(args.out, result.predictions.to_csv(index=False), "utf-8-sig")
     return EXIT_OK
 
 
@@ -146,22 +175,22 @@ def _cmd_explain(args: argparse.Namespace, settings: Settings) -> int:
 
     service = PredictionService.load(auto_train=False, settings=settings)
     path = Path(args.file)
-    result = service.predict_file(path.read_bytes() if path.is_file() else b"", path.name)
+    result = service.predict_file(_read_input(path), path.name)
     payload = service.explain(result, args.row)
     echo(payload["fallback_text"])
     if args.out:
-        Path(args.out).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        echo(f"Wrote {args.out}")
+        _write_output(args.out, json.dumps(payload, indent=2) + "\n", "utf-8")
     return EXIT_OK
 
 
 def _cmd_evaluate_holdout(args: argparse.Namespace, settings: Settings) -> int:
     from ledgerclf.holdout_eval import run_holdout_evaluation
     from ledgerclf.splitting import issue_holdout_token
+    from ledgerclf.training import CHAMPION_NAME, FALLBACK_NAME
 
     token = issue_holdout_token(confirmed=args.confirm, reason=args.reason)
     summary = run_holdout_evaluation(settings, token, rerun=args.rerun)
-    for name in ("champion", "fallback_logistic"):
+    for name in (CHAMPION_NAME, FALLBACK_NAME):
         metrics = summary.get(name, {})
         if "accuracy" in metrics:
             echo(
@@ -169,6 +198,14 @@ def _cmd_evaluate_holdout(args: argparse.Namespace, settings: Settings) -> int:
                 f"macro_f1_5 {metrics['macro_f1_5']:.4f}"
             )
     echo("Wrote reports/holdout/")
+    return EXIT_OK
+
+
+def _cmd_serve(args: argparse.Namespace, settings: Settings) -> int:
+    from ledgerclf.server import serve
+
+    echo(f"Dashboard: http://{args.host}:{args.port}  (press Ctrl+C to stop)")
+    serve(args.host, args.port, open_browser=not args.no_browser)
     return EXIT_OK
 
 
@@ -186,13 +223,21 @@ COMMANDS: dict[str, tuple[str, Handler]] = {
     ),
     "predict": ("predict an Excel or CSV file", _cmd_predict),
     "explain": ("explain one predicted row of a file", _cmd_explain),
+    "serve": ("start the dashboard and its API", _cmd_serve),
 }
 
 
+class _Parser(argparse.ArgumentParser):
+    """Argument parser whose usage errors exit with the user-error code (argparse uses 2)."""
+
+    def error(self, message: str) -> NoReturn:
+        """Print the usage and the problem, then exit with ``EXIT_USER_ERROR``."""
+        self.print_usage(sys.stdout)
+        self.exit(EXIT_USER_ERROR, f"Error: {message}\n")
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="python -m ledgerclf", description="Accounts payable ledger classifier."
-    )
+    parser = _Parser(prog="python -m ledgerclf", description="Accounts payable ledger classifier.")
     parser.add_argument("--version", action="version", version=f"ledgerclf {__version__}")
     parser.add_argument("-v", "--verbose", action="store_true", help="show debug logging")
     commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
@@ -218,8 +263,14 @@ def _add_arguments(name: str, sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--confirm", action="store_true", help="confirm the single holdout look")
         sub.add_argument("--rerun", action="store_true", help="allow a second, logged evaluation")
         sub.add_argument(
-            "--reason", default="final evaluation", help="reason written to the access log"
+            "--reason",
+            default=DEFAULT_REASON,
+            help="reason written to the access log (a rerun needs its own reason)",
         )
+    if name == "serve":
+        sub.add_argument("--host", default="127.0.0.1", help="interface to bind")
+        sub.add_argument("--port", type=int, default=8000, help="port to listen on")
+        sub.add_argument("--no-browser", action="store_true", help="do not open a browser")
     if name in ("benchmark", "tune"):
         sub.add_argument("--quick", action="store_true", help="reduced budget for development")
     if name == "split":

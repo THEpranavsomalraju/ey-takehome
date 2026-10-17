@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,7 +17,7 @@ from typing import Any
 import joblib
 import sklearn
 
-from ledgerclf.config import FORCE_FALLBACK_ENV, Paths
+from ledgerclf.config import Paths
 from ledgerclf.environment import lightgbm_status
 from ledgerclf.exceptions import ArtifactError
 from ledgerclf.flags import ReviewPolicy
@@ -153,12 +152,10 @@ def load_best_available(paths: Paths) -> tuple[ModelBundle, str | None]:
         ArtifactError: When neither bundle can load.
     """
     available, reason = lightgbm_status()
-    if available and os.environ.get(FORCE_FALLBACK_ENV) != "1":
+    if available:
         try:
             return load_bundle(CHAMPION_BUNDLE, paths), None
         except ArtifactError as error:
-            if error.code == "ARTIFACT_MISSING":
-                raise
             reason = error.message
             logger.warning("Champion model unavailable, using the fallback: %s", reason)
     return load_bundle(FALLBACK_BUNDLE, paths), reason

@@ -14,10 +14,11 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 
+from ledgerclf.config import CalibrationParams
 from ledgerclf.labels import CANONICAL_CLASSES
 from ledgerclf.models import softmax
 
-_PROBABILITY_FLOOR = 1e-15
+_PROBABILITY_FLOOR = CalibrationParams().probability_floor
 
 
 def one_hot(y: np.ndarray, classes: Sequence[str] = CANONICAL_CLASSES) -> np.ndarray:

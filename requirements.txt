@@ -10,3 +10,13 @@ lightgbm==4.6.0
 joblib==1.5.3
 openpyxl==3.1.5
 xlrd==2.0.2
+# Dashboard API and AI explanation agent (Part 2). Imported lazily: the
+# pipeline, CLI, and offline explanations work without them.
+fastapi==0.139.2
+starlette==1.3.1
+pydantic==2.13.4
+uvicorn==0.51.0
+python-multipart==0.0.32
+anthropic==0.117.0
+httpx==0.28.1
+truststore==0.10.4

@@ -8,42 +8,16 @@ producing command, a description, and its columns.
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from ledgerclf.config import Settings
 from ledgerclf.exceptions import ConfigError
+from ledgerclf.jsonsafe import to_jsonable
 
 MANIFEST_NAME = "manifest.json"
-
-
-def to_jsonable(value: Any) -> Any:
-    """Convert numpy and pandas values to native, JSON-safe Python values.
-
-    NaN and infinities become None so that ``json.dumps`` output stays strict.
-    """
-    if isinstance(value, dict):
-        return {str(k): to_jsonable(v) for k, v in value.items()}
-    if isinstance(value, list | tuple):
-        return [to_jsonable(v) for v in value]
-    if isinstance(value, np.ndarray):
-        return [to_jsonable(v) for v in value.tolist()]
-    if isinstance(value, np.bool_ | bool):
-        return bool(value)
-    if isinstance(value, np.integer):
-        return int(value)
-    if isinstance(value, np.floating | float):
-        number = float(value)
-        return number if math.isfinite(number) else None
-    if value is None or value is pd.NA or value is pd.NaT:
-        return None
-    if isinstance(value, pd.Timestamp):
-        return value.isoformat()
-    return value
 
 
 def write_table(
@@ -89,6 +63,32 @@ def write_json(
     path.write_text(text + "\n", encoding="utf-8")
     register(settings, file, title, producer, description, sorted(str(k) for k in payload))
     return path
+
+
+def write_reports(
+    settings: Settings,
+    catalog: dict[str, tuple[str, str]],
+    outputs: dict[str, pd.DataFrame | dict[str, Any]],
+    producer: str,
+) -> list[str]:
+    """Write every report of one command and register it in the manifest.
+
+    Args:
+        settings: Project settings.
+        catalog: Report path to (title, description).
+        outputs: Report path to its table or JSON payload.
+        producer: CLI command that produces the reports.
+
+    Returns:
+        The report paths written, in catalog order.
+    """
+    for file, (title, description) in catalog.items():
+        result = outputs[file]
+        if isinstance(result, pd.DataFrame):
+            write_table(settings, file, result, title, producer, description)
+        else:
+            write_json(settings, file, result, title, producer, description)
+    return list(catalog)
 
 
 def register(

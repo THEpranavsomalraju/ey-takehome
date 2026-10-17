@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -262,6 +262,8 @@ def _resolve_by_header(
         label = clean_text(header, limits.header_max_chars)[0] or ""
         if name is None:
             values = body.iloc[:, position]
+            if position == 0 and _is_index_artifact(label, values):
+                continue
             if label == "" and not _is_blank(values):
                 filled = ~values.map(is_blank_cell).to_numpy()
                 ragged_rows.update((body.index[filled] + 1).tolist())
@@ -285,7 +287,7 @@ def _resolve_by_header(
             make_issue(
                 Severity.WARNING,
                 "EXTRA_COLUMNS_IGNORED",
-                "Ignored columns not used by the model: " + ", ".join(extras) + ".",
+                "Ignored columns not used by the model: " + _row_list(extras, limits) + ".",
             )
         )
     if ragged_rows:
@@ -644,7 +646,7 @@ def _truncation_issues(
     return [make_issue(Severity.INFO, "TEXT_TRUNCATED", message, rows=truncated)]
 
 
-def _row_list(rows: list[int], limits: Limits) -> str:
+def _row_list(rows: Sequence[object], limits: Limits) -> str:
     shown_count = limits.issue_rows_shown
     shown = ", ".join(str(r) for r in rows[:shown_count])
     extra = len(rows) - shown_count

@@ -27,6 +27,16 @@ def holdout_rows(settings) -> pd.DataFrame:
     return frame.head(40)
 
 
+@pytest.fixture(scope="module")
+def unseen_rows(holdout_rows) -> pd.DataFrame:
+    """Holdout features with a new Col2, so they match neither holdout nor training rows.
+
+    Labels attached to real holdout rows stay unread before the holdout
+    evaluation (DECISIONS.md D35), so label-handling tests use these rows.
+    """
+    return holdout_rows.assign(Col2=[f"T{i:05d}" for i in range(len(holdout_rows))])
+
+
 def _labels(result) -> list[str]:
     return result.predictions["predicted_label"].tolist()
 
@@ -68,9 +78,12 @@ def test_f13_raw_file_gives_5899_predictions_and_metric_keys(service, settings):
         settings.paths.raw_data.read_bytes(), settings.paths.raw_data.name
     )
     assert len(result.predictions) == 5899
-    # Structure only: the raw file contains holdout rows (DECISIONS.md D26).
+    # Structure only: the raw file contains holdout rows (DECISIONS.md D26, D35).
     assert {"accuracy", "macro_f1_5", "labeled_rows"} <= set(result.metrics)
-    assert result.metrics["labeled_rows"] == 5899
+    holdout = len(pd.read_csv(settings.paths.holdout / "holdout_features.csv", dtype=object))
+    assert result.metrics["labeled_rows"] == 5899 - holdout
+    codes = {i.code for i in result.report.issues}
+    assert {"HOLDOUT_METRICS_WITHHELD", "TRAINING_ROWS_IN_UPLOAD"} <= codes
 
 
 def test_s04_shuffled_columns_give_identical_predictions(service, holdout_rows):
@@ -79,8 +92,8 @@ def test_s04_shuffled_columns_give_identical_predictions(service, holdout_rows):
     assert _labels(service.predict_file(_csv(shuffled), "shuffled.csv")) == _labels(reference)
 
 
-def test_s07_positional_file_with_labels_scores_them(service, holdout_rows):
-    rows = holdout_rows.assign(label="Category_1").to_numpy().tolist()
+def test_s07_positional_file_with_labels_scores_them(service, unseen_rows):
+    rows = unseen_rows.assign(label="Category_1").to_numpy().tolist()
     result = service.predict_file(csv_bytes(rows, header=None), "noheader.csv")
     assert result.metrics is not None and result.metrics["labeled_rows"] == len(rows)
 
@@ -125,15 +138,15 @@ def test_v06_v08_v09_v13_v14_v15_v18_bad_values_predict_with_flags(
     assert np.isfinite(_probabilities(result)).all()
 
 
-def test_l01_l02_l04_label_variants_and_unknowns(service, holdout_rows):
+def test_l01_l02_l04_label_variants_and_unknowns(service, unseen_rows):
     labels = ["Category 3", "category_1", "Categry_6", "Category_9", "", "foo"] + ["Category_1"] * (
-        len(holdout_rows) - 6
+        len(unseen_rows) - 6
     )
     result = service.predict_file(
-        _csv(holdout_rows.assign(ClassificationLabel=labels)), "labels.csv"
+        _csv(unseen_rows.assign(ClassificationLabel=labels)), "labels.csv"
     )
-    assert len(result.predictions) == len(holdout_rows)
-    assert result.metrics["labeled_rows"] == len(holdout_rows) - 3
+    assert len(result.predictions) == len(unseen_rows)
+    assert result.metrics["labeled_rows"] == len(unseen_rows) - 3
     assert "UNKNOWN_LABELS" in [i.code for i in result.report.issues]
     assert result.predictions["correct"].iloc[3] is None
 

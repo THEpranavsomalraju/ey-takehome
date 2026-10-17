@@ -19,9 +19,11 @@ import pandas as pd
 from scipy.stats import chi2_contingency
 from sklearn.metrics import mutual_info_score, normalized_mutual_info_score
 
-from ledgerclf.config import Settings
-from ledgerclf.labels import CANONICAL_CLASSES, normalize_labels
-from ledgerclf.reports import write_json, write_table
+from ledgerclf.config import EdaParams, Settings
+from ledgerclf.features import signed_log
+from ledgerclf.labels import CANONICAL_CLASSES, RARE_CLASSES, normalize_labels
+from ledgerclf.reference import pair_key
+from ledgerclf.reports import write_reports
 from ledgerclf.schema import (
     AMOUNT,
     COL_ACCOUNT,
@@ -48,10 +50,11 @@ from ledgerclf.values import is_missing, period_label
 logger = logging.getLogger(__name__)
 
 PRODUCER = "eda"
-TOP_VALUES = 20
-HISTOGRAM_BINS = 30
-IQR_MULTIPLIER = 1.5
-AMOUNT_DECILES = 10
+_SIZES = EdaParams()
+TOP_VALUES = _SIZES.top_values
+HISTOGRAM_BINS = _SIZES.histogram_bins
+IQR_MULTIPLIER = _SIZES.iqr_multiplier
+AMOUNT_DECILES = _SIZES.amount_deciles
 SCIENTIFIC_STYLE = re.compile(r"^\d\.\d+[A-Za-z][+-]\d+$")
 INFERRED_ROLES = {
     COL_VENDOR: "Vendor name",
@@ -63,12 +66,6 @@ INFERRED_ROLES = {
     COL_DOC_TYPE: "Document flag",
     LABEL_COLUMN: "Target",
 }
-
-
-def signed_log(values: pd.Series | np.ndarray) -> np.ndarray:
-    """Return ``sign(x) * log1p(abs(x))``, the scale used for amounts."""
-    array = np.asarray(values, dtype=float)
-    return np.asarray(np.sign(array) * np.log1p(np.abs(array)))
 
 
 def _text(series: pd.Series) -> pd.Series:
@@ -328,7 +325,8 @@ def categorical_views(frame: pd.DataFrame, y: np.ndarray) -> dict[str, pd.Series
 
 
 def _pair_key(frame: pd.DataFrame) -> pd.Series:
-    return _text(frame[COL_VENDOR]).str.lower() + " || " + _text(frame[COL_ACCOUNT]).str.lower()
+    pairs = [pair_key(v, a) for v, a in zip(frame[COL_VENDOR], frame[COL_ACCOUNT], strict=True)]
+    return pd.Series(pairs, index=frame.index)
 
 
 def cramers_v_matrix(frame: pd.DataFrame, y: np.ndarray) -> pd.DataFrame:
@@ -406,7 +404,7 @@ def conflict_groups(frame: pd.DataFrame, y: np.ndarray, groups: np.ndarray) -> p
 
 def rare_class_rows(frame: pd.DataFrame, y: np.ndarray) -> pd.DataFrame:
     """Return every training row of the rare classes (Category_3 to Category_6)."""
-    rare = ~np.isin(y, ["Category_1", "Category_2"])
+    rare = np.isin(y, RARE_CLASSES)
     columns = [ROW_ID, *INPUT_COLUMNS]
     table = frame.loc[rare, columns].copy()
     table.insert(1, "class", y[rare])
@@ -590,11 +588,5 @@ def run_eda(settings: Settings) -> list[str]:
     resolved, labels_raw = load_full_file_structure(settings)
     training = load_training_frame(settings)
     builders = _builders(resolved, labels_raw, training)
-    for file, (title, description) in EDA_CATALOG.items():
-        result = builders[file]()
-        if isinstance(result, pd.DataFrame):
-            write_table(settings, file, result, title, PRODUCER, description)
-        else:
-            write_json(settings, file, result, title, PRODUCER, description)
-        logger.info("wrote %s", file)
-    return list(EDA_CATALOG)
+    outputs = {file: builders[file]() for file in EDA_CATALOG}
+    return write_reports(settings, EDA_CATALOG, outputs, PRODUCER)

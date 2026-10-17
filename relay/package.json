@@ -1,0 +1,6 @@
+{
+  "name": "ledgerclf-agent-relay",
+  "private": true,
+  "type": "module",
+  "description": "Relay that forwards the ledger classifier's explanation requests to Claude with a server-side key."
+}

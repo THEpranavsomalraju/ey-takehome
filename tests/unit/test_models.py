@@ -137,7 +137,7 @@ def test_blend_is_deterministic(sample, settings):
         lambda s: make_dummy(),
         lambda s: make_lookup(),
         lambda s: make_complement_nb(0.1),
-        lambda s: make_linear_svc(1.0, 0.5, 0),
+        lambda s: make_linear_svc(1.0, 0.5, 0, s.benchmark.svc_max_iter),
         lambda s: make_logistic(s.linear),
         lambda s: make_lightgbm(replace(s.tree, **SMALL_TREE), 0),
         lambda s: make_probability_blend(s.linear, replace(s.tree, **SMALL_TREE), 0),

@@ -24,7 +24,7 @@ import pandas as pd
 import xlrd
 from openpyxl.utils.exceptions import InvalidFileException
 
-from ledgerclf.config import Limits
+from ledgerclf.config import UTF16_NUL_SHARE, UTF16_SAMPLE_BYTES, UTF16_TEXT_SHARE, Limits
 from ledgerclf.exceptions import FileReadError, SchemaError
 from ledgerclf.schema import (
     INPUT_COLUMNS,
@@ -252,14 +252,14 @@ def _utf16_variant(data: bytes) -> str | None:
     """Return the UTF-16 codec for BOM-marked or BOM-less UTF-16 text, else None."""
     if data.startswith((b"\xff\xfe", b"\xfe\xff")):
         return "utf-16"
-    sample = data[:400]
+    sample = data[:UTF16_SAMPLE_BYTES]
     if len(sample) < 2:
         return None
     even_zero = sample[0::2].count(0) / len(sample[0::2])
     odd_zero = sample[1::2].count(0) / len(sample[1::2])
-    if odd_zero > 0.9 and even_zero < 0.1:
+    if odd_zero > UTF16_NUL_SHARE and even_zero < UTF16_TEXT_SHARE:
         return "utf-16-le"
-    if even_zero > 0.9 and odd_zero < 0.1:
+    if even_zero > UTF16_NUL_SHARE and odd_zero < UTF16_TEXT_SHARE:
         return "utf-16-be"
     return None
 

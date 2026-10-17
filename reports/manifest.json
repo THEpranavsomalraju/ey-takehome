@@ -517,8 +517,9 @@
     {
       "columns": [
         "coerced",
+        "engineered",
         "matrix",
-        "resolved"
+        "raw"
       ],
       "description": "Rows, columns, missing values, and dtypes at each stage: raw, resolved, coerced, and the final sparse matrix.",
       "file": "preprocessing/stage_snapshots.json",
@@ -612,6 +613,7 @@
         "champion",
         "eligible",
         "fallback",
+        "flag_policy_notes",
         "rule",
         "trail",
         "tuning_quick_mode"

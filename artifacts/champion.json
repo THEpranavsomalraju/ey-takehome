@@ -85,7 +85,7 @@
       "subsample": 0.7
     }
   },
-  "created_utc": "2026-10-17T12:38:34+00:00",
+  "created_utc": "2026-10-17T13:08:15+00:00",
   "decision_trail": [
     "best macro_f1_5 = 0.7475; best out-of-time accuracy = 0.9480",
     "logistic_p0: cv 0.9513, macro_f1_5 0.6887, oot 0.9442 -> excluded",

@@ -28,7 +28,7 @@ from ledgerclf.calibration import (
     reliability_table,
     threshold_table,
 )
-from ledgerclf.config import DecisionRule, FeatureParams, Settings
+from ledgerclf.config import DecisionRule, FeatureParams, FlagPolicyParams, Settings
 from ledgerclf.evaluation import (
     CVResult,
     confusion_table,
@@ -49,7 +49,7 @@ from ledgerclf.flags import (
 from ledgerclf.labels import CANONICAL_CLASSES
 from ledgerclf.models import make_blend, make_logistic, make_probability_blend, softmax
 from ledgerclf.reference import build_reference
-from ledgerclf.reports import write_json, write_table
+from ledgerclf.reports import write_reports
 from ledgerclf.schema import AMOUNT, COL_ACCOUNT, COL_DESCRIPTION, COL_PERIOD, COL_VENDOR
 from ledgerclf.splitting import ROW_ID, TrainingData, load_training_frame, out_of_time_mask
 from ledgerclf.tuning import TunedParams
@@ -168,6 +168,12 @@ def apply_decision_rule(candidates: list[CandidateScore], rule: DecisionRule) ->
             f"{c.name}: cv {c.cv_accuracy:.4f}, macro_f1_5 {c.macro_f1_5:.4f}, "
             f"oot {c.oot_accuracy:.4f} -> {status}"
         )
+    if not eligible:
+        raise ConfigError(
+            "No candidate passes both guardrails of the champion rule (D11), which does not "
+            "define this case. Decision trail: " + " | ".join(trail),
+            code="NO_ELIGIBLE_CANDIDATE",
+        )
     ranked = sorted(eligible, key=lambda c: c.cv_accuracy, reverse=True)
     if len(ranked) == 1 or ranked[0].cv_accuracy - ranked[1].cv_accuracy >= rule.tie_margin:
         trail.append(
@@ -211,7 +217,9 @@ def calibrate(result: CVResult, y: np.ndarray, settings: Settings, seed: int) ->
     """Fit the temperature on out-of-fold logits of one seed and report before and after."""
     if seed not in result.oof_logits:
         raise ConfigError(
-            f"No out-of-fold logits for {result.model_name}; cannot calibrate.", code="NO_LOGITS"
+            f"No out-of-fold logits for {result.model_name}; cannot calibrate. Candidates must "
+            "expose decision_function (see build_candidate).",
+            code="NO_LOGITS",
         )
     logits = result.oof_logits[seed]
     params = settings.calibration
@@ -312,32 +320,40 @@ def high_confidence_errors(data: TrainingData, proba: np.ndarray, threshold: flo
 
 
 def blend_comparison(
-    settings: Settings, data: TrainingData, tuned: TunedParams, power: float
+    settings: Settings,
+    data: TrainingData,
+    tuned: TunedParams,
+    power: float,
+    logodds_result: CVResult,
 ) -> pd.DataFrame:
-    """Compare the log-odds blend with probability averaging under the same tuned members."""
+    """Compare the log-odds blend with probability averaging under the same tuned members.
+
+    The log-odds result comes from the candidate scoring (same splits), so only
+    the probability blend is fitted here.
+    """
     splits = grouped_splits(data.y, data.groups, settings.seeds, settings.cv_folds)
     linear = replace(tuned.linear_by_power[power], class_weight_power=power)
     tree = replace(tuned.tree, class_weight_power=power)
-    models = {
-        "logodds_blend": build_candidate(settings, tuned, "logodds_blend", power),
-        "probability_blend": make_probability_blend(linear, tree, settings.random_state),
-    }
-    rows = []
-    for name, estimator in models.items():
-        result = run_cv(name, estimator, data.frame, data.y, splits, settings.benchmark.cv_jobs)
-        rows.append(
-            {
-                "model": name,
-                "power": power,
-                "cv_accuracy": result.summary["accuracy_mean"],
-                "cv_accuracy_std": result.summary["accuracy_std"],
-                "macro_f1_5": result.summary["macro_f1_5_seed_mean"],
-            }
+    estimator = make_probability_blend(linear, tree, settings.random_state)
+    probability_result = run_cv(
+        "probability_blend", estimator, data.frame, data.y, splits, settings.benchmark.cv_jobs
+    )
+    rows = [
+        {
+            "model": name,
+            "power": power,
+            "cv_accuracy": result.summary["accuracy_mean"],
+            "cv_accuracy_std": result.summary["accuracy_std"],
+            "macro_f1_5": result.summary["macro_f1_5_seed_mean"],
+        }
+        for name, result in (
+            ("logodds_blend", logodds_result),
+            ("probability_blend", probability_result),
         )
+    ]
     table = pd.DataFrame(rows)
     table["accuracy_gap_vs_probability_blend"] = (
-        table["cv_accuracy"]
-        - table.loc[table["model"] == "probability_blend", "cv_accuracy"].item()
+        table["cv_accuracy"] - probability_result.summary["accuracy_mean"]
     )
     return table
 
@@ -420,29 +436,114 @@ SELECTION_REPORTS: dict[str, tuple[str, str]] = {
     ),
     "selection/high_confidence_errors.csv": (
         "High-confidence errors",
-        "Out-of-fold errors made with calibrated confidence of 0.9 or more: candidates for "
-        "client label review (D21).",
+        "Out-of-fold errors made with calibrated confidence of "
+        f"{FlagPolicyParams().high_confidence_error} or more: candidates for client label "
+        "review (D21).",
     ),
 }
 
 
-def _write_reports(settings: Settings, outputs: dict[str, pd.DataFrame | dict[str, Any]]) -> None:
-    for file, (title, description) in SELECTION_REPORTS.items():
-        result = outputs[file]
-        if isinstance(result, pd.DataFrame):
-            write_table(settings, file, result, title, PRODUCER, description)
-        else:
-            write_json(settings, file, result, title, PRODUCER, description)
+@dataclass
+class SelectionOutcome:
+    """Everything the selection step decided, for champion.json and the reports."""
+
+    scores: list[CandidateScore]
+    results: dict[str, CVResult]
+    decision: ChampionDecision
+    fallback: str
+    champion_cal: CalibrationOutcome
+    fallback_cal: CalibrationOutcome
+    thresholds: pd.DataFrame
+    threshold: float
+    flag_table: pd.DataFrame
+    policy: ReviewPolicy
+    notes: list[str]
 
 
-def _review_summary(
-    flags: pd.DataFrame, confidence: np.ndarray, correct: np.ndarray, policy: ReviewPolicy
-) -> dict[str, float]:
-    _, review = apply_review_policy(flags, confidence, policy)
+def decide(settings: Settings, data: TrainingData, tuned: TunedParams) -> SelectionOutcome:
+    """Score candidates, apply the rule, calibrate, pick the threshold, set flag severities."""
+    scores, results = score_candidates(settings, data, tuned)
+    decision = apply_decision_rule(scores, settings.decision_rule)
+    fallback = fallback_name(scores)
+    seed = settings.seeds[0]
+    champion_cal = calibrate(results[decision.champion], data.y, settings, seed)
+    fallback_cal = calibrate(results[fallback], data.y, settings, seed)
+    proba = champion_cal.calibrated_proba
+    correct = np.asarray(CANONICAL_CLASSES, dtype=object)[proba.argmax(axis=1)] == data.y
+    params = settings.calibration
+    thresholds = threshold_table(proba, data.y, params.threshold_candidates)
+    threshold = choose_threshold(thresholds, params.target_kept_accuracy, params.default_threshold)
+    row_flags = fold_flags(data, results[decision.champion], seed)
+    all_flags, _ = apply_review_policy(
+        row_flags, proba.max(axis=1), ReviewPolicy(threshold=threshold)
+    )
+    flag_table = accuracy_by_flag(all_flags, correct)
+    policy, notes = evidence_policy(flag_table, threshold, settings)
+    return SelectionOutcome(
+        scores,
+        results,
+        decision,
+        fallback,
+        champion_cal,
+        fallback_cal,
+        thresholds,
+        threshold,
+        flag_table,
+        policy,
+        notes,
+    )
+
+
+def selection_outputs(
+    settings: Settings,
+    data: TrainingData,
+    tuned: TunedParams,
+    outcome: SelectionOutcome,
+    quick: bool,
+) -> dict[str, pd.DataFrame | dict[str, Any]]:
+    """Assemble every selection report from the outcome."""
+    seed = settings.seeds[0]
+    decision, champion_result = outcome.decision, outcome.results[outcome.decision.champion]
+    champion = next(s for s in outcome.scores if s.name == decision.champion)
+    power = champion.power if champion.family == "logodds_blend" else 0.0
+    logodds = outcome.results[candidate_name("logodds_blend", power)]
+    severity = outcome.flag_table["flag"].map(lambda f: str(outcome.policy.severities.get(f, "")))
     return {
-        "review_share": float(review.mean()),
-        "accuracy_reviewed": float(correct[review].mean()) if review.any() else float("nan"),
-        "accuracy_auto": float(correct[~review].mean()) if (~review).any() else float("nan"),
+        "selection/champion_candidates.csv": pd.DataFrame([s.to_dict() for s in outcome.scores]),
+        "selection/champion_decision.json": {
+            "champion": decision.champion,
+            "fallback": outcome.fallback,
+            "eligible": decision.eligible,
+            "trail": decision.trail,
+            "rule": settings.decision_rule.__dict__,
+            "flag_policy_notes": outcome.notes,
+            "tuning_quick_mode": quick,
+        },
+        "selection/blend_comparison.csv": blend_comparison(settings, data, tuned, power, logodds),
+        "selection/oof_confusion_matrix.csv": confusion_table(
+            data.y, champion_result.oof_pred[seed]
+        ),
+        "selection/oof_classification_report.csv": per_class_report(
+            data.y, champion_result.oof_pred[seed]
+        ),
+        "selection/calibration_reliability.csv": pd.concat(
+            [outcome.champion_cal.reliability, outcome.fallback_cal.reliability], ignore_index=True
+        ),
+        "selection/calibration_summary.json": {
+            "champion": decision.champion,
+            "fallback": outcome.fallback,
+            decision.champion: outcome.champion_cal.summary,
+            outcome.fallback: outcome.fallback_cal.summary,
+            "ece_target": settings.calibration.ece_target,
+            "seed": seed,
+        },
+        "selection/threshold_table.csv": outcome.thresholds.assign(
+            chosen=outcome.thresholds["threshold"] == outcome.threshold
+        ),
+        "selection/accuracy_by_flag.csv": outcome.flag_table.assign(severity=severity),
+        "selection/high_confidence_errors.csv": high_confidence_errors(
+            data, outcome.champion_cal.calibrated_proba, settings.flag_policy.high_confidence_error
+        ),
     }
 
 
@@ -457,109 +558,40 @@ def run_selection(settings: Settings) -> list[str]:
     """
     tuned, quick = load_tuned(settings)
     data = load_training_frame(settings)
-    scores, results = score_candidates(settings, data, tuned)
-    decision = apply_decision_rule(scores, settings.decision_rule)
-    fallback = fallback_name(scores)
-    seed = settings.seeds[0]
-    champion_cal = calibrate(results[decision.champion], data.y, settings, seed)
-    fallback_cal = calibrate(results[fallback], data.y, settings, seed)
-    proba = champion_cal.calibrated_proba
-    confidence = proba.max(axis=1)
-    correct = np.asarray(CANONICAL_CLASSES, dtype=object)[proba.argmax(axis=1)] == data.y
-    thresholds = threshold_table(proba, data.y, settings.calibration.threshold_candidates)
-    threshold = choose_threshold(
-        thresholds,
-        settings.calibration.target_kept_accuracy,
-        settings.calibration.default_threshold,
-    )
-    row_flags = fold_flags(data, results[decision.champion], seed)
-    all_flags, _ = apply_review_policy(row_flags, confidence, ReviewPolicy(threshold=threshold))
-    flag_table = accuracy_by_flag(all_flags, correct)
-    policy, notes = evidence_policy(flag_table, threshold, settings)
-    by_name = {s.name: s for s in scores}
-    champion = by_name[decision.champion]
-    comparison_power = champion.power if champion.family == "logodds_blend" else 0.0
-    review = _review_summary(row_flags, confidence, correct, policy)
-    write_champion(
-        settings, tuned, decision, by_name, fallback, champion_cal, fallback_cal, policy, quick
-    )
-    _write_reports(
+    outcome = decide(settings, data, tuned)
+    write_champion(settings, tuned, outcome, quick)
+    logger.info("flag policy: %s", "; ".join(outcome.notes))
+    return write_reports(
         settings,
-        {
-            "selection/champion_candidates.csv": pd.DataFrame([s.to_dict() for s in scores]),
-            "selection/champion_decision.json": {
-                "champion": decision.champion,
-                "fallback": fallback,
-                "eligible": decision.eligible,
-                "trail": decision.trail,
-                "rule": settings.decision_rule.__dict__,
-                "tuning_quick_mode": quick,
-            },
-            "selection/blend_comparison.csv": blend_comparison(
-                settings, data, tuned, comparison_power
-            ),
-            "selection/oof_confusion_matrix.csv": confusion_table(
-                data.y, results[decision.champion].oof_pred[seed]
-            ),
-            "selection/oof_classification_report.csv": per_class_report(
-                data.y, results[decision.champion].oof_pred[seed]
-            ),
-            "selection/calibration_reliability.csv": pd.concat(
-                [champion_cal.reliability, fallback_cal.reliability], ignore_index=True
-            ),
-            "selection/calibration_summary.json": {
-                "champion": decision.champion,
-                "fallback": fallback,
-                decision.champion: champion_cal.summary,
-                fallback: fallback_cal.summary,
-                "ece_target": settings.calibration.ece_target,
-                "seed": seed,
-            },
-            "selection/threshold_table.csv": thresholds.assign(
-                chosen=thresholds["threshold"] == threshold
-            ),
-            "selection/accuracy_by_flag.csv": flag_table.assign(
-                severity=flag_table["flag"].map(lambda f: str(policy.severities.get(f, "")))
-            ),
-            "selection/high_confidence_errors.csv": high_confidence_errors(
-                data, proba, settings.flag_policy.high_confidence_error
-            ),
-        },
+        SELECTION_REPORTS,
+        selection_outputs(settings, data, tuned, outcome, quick),
+        PRODUCER,
     )
-    logger.info("flag policy: %s; review share %.3f", "; ".join(notes), review["review_share"])
-    return list(SELECTION_REPORTS)
 
 
 def write_champion(
-    settings: Settings,
-    tuned: TunedParams,
-    decision: ChampionDecision,
-    scores: dict[str, CandidateScore],
-    fallback: str,
-    champion_cal: CalibrationOutcome,
-    fallback_cal: CalibrationOutcome,
-    policy: ReviewPolicy,
-    quick: bool,
+    settings: Settings, tuned: TunedParams, outcome: SelectionOutcome, quick: bool
 ) -> None:
     """Write artifacts/champion.json: the configuration ``train`` must use."""
-    champion, backup = scores[decision.champion], scores[fallback]
+    scores = {s.name: s for s in outcome.scores}
+    champion, backup = scores[outcome.decision.champion], scores[outcome.fallback]
     payload = {
         "created_utc": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat(),
         "champion": {
             "name": champion.name,
             **champion_config(tuned, champion.family, champion.power, settings),
-            "temperature": champion_cal.temperature,
+            "temperature": outcome.champion_cal.temperature,
             "scores": champion.to_dict(),
         },
         "fallback": {
             "name": backup.name,
             **champion_config(tuned, backup.family, backup.power, settings),
-            "temperature": fallback_cal.temperature,
+            "temperature": outcome.fallback_cal.temperature,
             "scores": backup.to_dict(),
         },
-        "review_policy": policy.to_dict(),
-        "candidates": [s.to_dict() for s in scores.values()],
-        "decision_trail": decision.trail,
+        "review_policy": outcome.policy.to_dict(),
+        "candidates": [s.to_dict() for s in outcome.scores],
+        "decision_trail": outcome.decision.trail,
         "tuning_quick_mode": quick,
     }
     settings.paths.artifacts.mkdir(parents=True, exist_ok=True)

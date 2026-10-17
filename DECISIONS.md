@@ -339,10 +339,56 @@ Decision: search `reg_lambda` in (1, 2, 5) only. Without L2 regularization, a cl
 
 Evidence: same configuration on the 5 primary folds (seed 0). reg_lambda 0: fold accuracy 0.951, 0.919, 0.884, 0.957, 0.951; largest raw score 51,830. reg_lambda 1: 0.949, 0.944, 0.940, 0.953, 0.943; largest raw score 11.8. reg_lambda 2: largest raw score 10.9.
 
-Consequences: a numerically stable tree member, and a mean CV accuracy that no longer hides a collapsed fold. Test: tests/unit/test_tuning.py::test_tree_space_keeps_l2_regularization.
+Consequences: a numerically stable tree member, and a mean CV accuracy that no longer hides a collapsed fold. Test: tests/unit/test_reference_flags_selection.py::test_tree_space_keeps_l2_regularization.
 
 ## D30. Fallback model as a tree-less blend; artifact file names
 
 Status: Accepted
 
 Decision: the fallback is `LogOddsBlendClassifier(tree=None)`: a temperature-scaled logistic regression with the same explanation code path and zero LightGBM objects in its pickle (test e01 unpickles it with LightGBM blocked). Artifacts are named `model_champion.joblib` and `model_fallback.joblib` (docs/02 used `model_blend.joblib`), because the champion rule could have chosen a logistic model.
+
+## D31. Explanation payload details beyond docs/02 and docs/04
+
+Status: Accepted
+
+- `explain_row(bundle, result, row_number)` explains one row of a `PredictionResult` (docs/02 sketched `explain_rows(bundle, frame, row_numbers)`); the dashboard explains one row per click, so a batch API added nothing. `PredictionResult.frame` and `row_flags` are public fields because the agent's tools read them.
+- The deterministic fallback text adds one sentence to the docs/04 section 13 template when the class base rate carries more of the margin than the row's own values ("Most of the margin comes from the base rate ..."). Without it, rows such as holdout row 1 read as contradictory: every input column pushes toward the runner-up, yet the prediction holds.
+- One-hot features for values seen fewer than twice are shown as "(rare or unseen value)" instead of sklearn's internal name.
+
+## D32. Explanation agent: tools, engines, grounding, relay
+
+Status: Accepted (user approved Claude Haiku 5.5 and the relay on 2026-10-17)
+
+Decision: the agent runs only when a user clicks Explain on one row. Engines in order: the user's own `ANTHROPIC_API_KEY` (dashboard field or environment, optional `ANTHROPIC_WORKSPACE_ID`), then the hosted relay (`relay/`, deployed on Vercel; the project owner's key lives only in Vercel's encrypted environment), then a deterministic offline engine. Claude (`claude-haiku-5-5`, effort low, at most 6 turns, 25 s timeout) calls four read-only tools: the exact explanation payload, training evidence for any value or token, the most similar training rows (cosine on the model's own feature space), and a what-if re-score. Its answer is accepted only when every number it cites appears in a tool result (percentages within 1 point); otherwise, and on refusal, truncation, timeout, or any client error, the offline engine answers from the same tools and the reason is shown.
+
+Relay safeguards: shared token header, fixed model, output cap 4,000 tokens, the four tool names only, request size and message count limits, a per-instance rate limit, and the Anthropic workspace spend limit.
+
+Alternatives: shipping a key in the ZIP (exposes the key); requiring the grader's key (most graders would see only the offline engine); a local model (large download, slow on CPU, unreliable tool use); LangChain (adds dependencies without changing the key or network problem).
+
+Evidence: tests/integration/test_agent_and_server.py (scripted fake client: tool loop, grounding rejection, refusal, truncation, turn limit, client failure, connection resolution order); relay checked live: health OK, 401 without token, unknown tool rejected, request forwarded to Anthropic.
+
+## D33. Layering of the report writer
+
+Status: Accepted (code review, block B to D)
+
+Context: docs/06 section 7.1 places `reports` in the top layer, but every analysis command (eda, benchmark, tune, select) writes its own report files through it, and predictions used its JSON helper.
+
+Decision: `to_jsonable` moves to a bottom-layer module `jsonsafe.py`, so prediction, explanation, and the agent never import the report layer. `reports.py` is a file-writing utility (tables, JSON, manifest) that the producer commands call through one helper, `write_reports`; it imports only config, exceptions, and jsonsafe, so no cycle is possible.
+
+## D34. Open question for the project owner: champion rule when no candidate is eligible
+
+Status: Open (does not affect the current result)
+
+docs/04 section 8 does not define the case where no candidate passes both guardrails (possible when the best-F1 candidate fails the out-of-time floor and vice versa). `select` now stops with a clear `NO_ELIGIBLE_CANDIDATE` error and the decision trail instead of crashing. Defining a fallback rule changes the champion rule, which needs the owner's decision (CLAUDE.md section 8). Two related notes for the model card: the fallback model is "the best logistic candidate" by CV accuracy without guardrails, as docs/04 states (logistic_p0, whose macro F1 is below the champion guardrail); and candidate scores reuse seed 0's folds, which tuning also used, so they are mildly optimistic; nested CV measures that optimism at -0.0008.
+
+## D35. Holdout labels are recognized by row, not by file bytes
+
+Status: Accepted (edge-case review, round 2; extends D26)
+
+Context: the service withheld metrics only when an upload was byte-identical to `holdout_with_labels.xlsx`. A CSV re-save, a copy pasted into another workbook, or the raw `Challenge_Data.xls` scored holdout labels in the dashboard, which CLAUDE.md rule 1 forbids before `evaluate-holdout`. The raw file also showed in-sample accuracy for training rows with no caveat.
+
+Decision: `ledgerclf/overlap.py` fingerprints rows in model form (normalized text of the five text columns, amount in cents, period index). Before any label is scored, the service matches the upload against the fingerprints of the unreleased holdout rows (read from the labeled holdout file with its label column dropped unread) and of the training rows. Matching holdout rows are predicted, but their labels are blanked before scoring (INFO `HOLDOUT_METRICS_WITHHELD`); matching training rows are scored with WARNING `TRAINING_ROWS_IN_UPLOAD`. Both checks run only for uploads that carry a label column. After the holdout evaluation, only the training check remains.
+
+Consequences: label-handling edge tests attach synthetic labels to holdout feature rows with a new Col2, so the rows match neither set (`unseen_rows` fixture). F13 now asserts the stricter count: the raw file scores 5,309 training rows and withholds 590.
+
+Evidence: tests/adversarial/test_holdout_guard.py, tests/adversarial/test_report_messages.py, tests/edge_cases/test_prediction_level.py::test_f13...; 531 distinct holdout fingerprints, 4,688 training fingerprints, overlap 0.

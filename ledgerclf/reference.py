@@ -14,8 +14,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from ledgerclf.config import ExplainParams
-from ledgerclf.features import normalize_text
+from ledgerclf.config import ExplainParams, FeatureParams
+from ledgerclf.features import GROUP_PAIR, normalize_text
 from ledgerclf.labels import CANONICAL_CLASSES
 from ledgerclf.schema import (
     AMOUNT,
@@ -28,8 +28,8 @@ from ledgerclf.schema import (
     TOKEN_COLUMNS,
 )
 
-PAIR_SEPARATOR = " || "
-PAIR_KEY = "Col1+Col6"
+PAIR_SEPARATOR = FeatureParams().pair_separator
+PAIR_KEY = GROUP_PAIR
 VALUE_COLUMNS = (COL_VENDOR, COL_ACCOUNT, COL_DOC_TYPE, COL_DESCRIPTION)
 
 ClassCounts = dict[str, dict[str, dict[str, int]]]

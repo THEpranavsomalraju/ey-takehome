@@ -37,7 +37,7 @@
       0.5
     ]
   },
-  "metric": "accuracy (macro_f1_5 logged beside it)",
+  "metric": "accuracy (macro_f1_5 logged beside it); trial metrics are means over folds, while select reports macro_f1_5 on pooled out-of-fold predictions",
   "nested": {
     "blend_weight": [
       0.4,
