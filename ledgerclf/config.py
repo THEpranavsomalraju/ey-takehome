@@ -160,6 +160,20 @@ class CalibrationParams:
 
 
 @dataclass(frozen=True)
+class FlagPolicyParams:
+    """Evidence rule for flag severities (DECISIONS.md D18).
+
+    A flag becomes critical when out-of-fold accuracy on its rows falls more
+    than ``critical_gap`` below the overall out-of-fold accuracy, measured on
+    at least ``min_rows`` rows. Flags with fewer rows keep their default.
+    """
+
+    critical_gap: float = 0.05
+    min_rows: int = 10
+    high_confidence_error: float = 0.9
+
+
+@dataclass(frozen=True)
 class ExplainParams:
     """Explanation payload settings (docs/04 section 13)."""
 
@@ -197,6 +211,41 @@ class BenchmarkParams:
 
 
 @dataclass(frozen=True)
+class TuningParams:
+    """Hyperparameter search spaces and budgets (docs/04 section 7)."""
+
+    linear_C: tuple[float, ...] = (1.0, 3.0, 10.0, 30.0, 100.0)  # noqa: N815 - sklearn name
+    powers: tuple[float, ...] = (0.0, 0.25, 0.5)
+    ngram_ranges: tuple[tuple[int, int], ...] = ((1, 1), (1, 2))
+    tree_space: dict[str, tuple[float, ...]] = field(
+        default_factory=lambda: {
+            "n_estimators": (300, 500, 800),
+            "learning_rate": (0.03, 0.05, 0.1),
+            "num_leaves": (15, 31, 63),
+            "max_depth": (-1, 6, 8, 12),
+            "min_child_samples": (1, 2, 3, 5, 10, 20),
+            # No 0: without L2 a one-row class gets exploding leaf values (D29).
+            "reg_lambda": (1.0, 2.0, 5.0),
+            "colsample_bytree": (0.3, 0.5, 0.8),
+            "subsample": (0.7, 0.8, 1.0),
+            "power": (0.0, 0.25),
+        }
+    )
+    tree_trials: int = 40
+    blend_weights: tuple[float, ...] = (0.3, 0.4, 0.5, 0.6, 0.7)
+    blend_powers: tuple[float, ...] = (0.0, 0.25)
+    nested_linear_C: tuple[float, ...] = (1.0, 3.0, 10.0, 30.0, 100.0)  # noqa: N815
+    nested_linear_powers: tuple[float, ...] = (0.0, 0.25, 0.5)
+    nested_tree_trials: int = 15
+    nested_blend_weights: tuple[float, ...] = (0.4, 0.5, 0.6)
+    quick_linear_C: tuple[float, ...] = (3.0, 10.0, 30.0)  # noqa: N815
+    quick_powers: tuple[float, ...] = (0.0, 0.25)
+    quick_tree_trials: int = 8
+    quick_blend_weights: tuple[float, ...] = (0.4, 0.5, 0.6)
+    quick_nested_tree_trials: int = 3
+
+
+@dataclass(frozen=True)
 class Settings:
     """Complete configuration bundle passed explicitly to modules."""
 
@@ -210,7 +259,9 @@ class Settings:
     decision_rule: DecisionRule = field(default_factory=DecisionRule)
     calibration: CalibrationParams = field(default_factory=CalibrationParams)
     explain: ExplainParams = field(default_factory=ExplainParams)
+    flag_policy: FlagPolicyParams = field(default_factory=FlagPolicyParams)
     benchmark: BenchmarkParams = field(default_factory=BenchmarkParams)
+    tuning: TuningParams = field(default_factory=TuningParams)
     seeds: tuple[int, ...] = (0, 1, 2)
     random_state: int = 0
     cv_folds: int = 5

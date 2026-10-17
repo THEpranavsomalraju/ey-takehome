@@ -74,6 +74,37 @@ def training(settings: Settings) -> TrainingData:
     return load_training_frame(settings)
 
 
+@pytest.fixture(scope="session")
+def service(settings: Settings):
+    from ledgerclf.service import PredictionService
+
+    return PredictionService.load(auto_train=False, settings=settings)
+
+
+@pytest.fixture(scope="session")
+def holdout_xlsx(settings: Settings) -> bytes:
+    return (settings.paths.holdout / "holdout_features.xlsx").read_bytes()
+
+
+@pytest.fixture(scope="session")
+def holdout_result(service, holdout_xlsx):
+    return service.predict_file(holdout_xlsx, "holdout_features.xlsx")
+
+
+def project_copy(settings: Settings, root: Path, with_artifacts: bool = True) -> Settings:
+    """Copy the data, split, and (optionally) artifacts into another root."""
+    import shutil
+
+    for relative in ("data/raw", "data/splits", "data/holdout"):
+        shutil.copytree(settings.paths.root / relative, root / relative)
+    if with_artifacts:
+        shutil.copytree(settings.paths.artifacts, root / "artifacts")
+    shutil.copytree(settings.paths.resources, root / "ledgerclf" / "resources")
+    from ledgerclf.config import Paths
+
+    return Settings(paths=Paths.from_root(root))
+
+
 def process(source: Path | bytes, file_name: str, settings: Settings | None = None):
     """Run the shared validation path: read, resolve, coerce. Returns (frame, issues, info)."""
     settings = settings or get_settings()

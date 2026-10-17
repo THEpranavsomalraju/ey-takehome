@@ -1,0 +1,22 @@
+{
+  "champion": "logodds_blend_p0.25",
+  "eligible": [
+    "logistic_p0.25",
+    "logodds_blend_p0.25"
+  ],
+  "fallback": "logistic_p0",
+  "rule": {
+    "macro_f1_tolerance": 0.03,
+    "oot_tolerance": 0.015,
+    "tie_margin": 0.002
+  },
+  "trail": [
+    "best macro_f1_5 = 0.7475; best out-of-time accuracy = 0.9480",
+    "logistic_p0: cv 0.9513, macro_f1_5 0.6887, oot 0.9442 -> excluded",
+    "logistic_p0.25: cv 0.9511, macro_f1_5 0.7389, oot 0.9336 -> eligible",
+    "logodds_blend_p0: cv 0.9544, macro_f1_5 0.7159, oot 0.9480 -> excluded",
+    "logodds_blend_p0.25: cv 0.9539, macro_f1_5 0.7475, oot 0.9403 -> eligible",
+    "logodds_blend_p0.25 leads on CV accuracy by at least 0.002 (or is the only eligible candidate): chosen"
+  ],
+  "tuning_quick_mode": false
+}

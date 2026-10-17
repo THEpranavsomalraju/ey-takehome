@@ -1,0 +1,145 @@
+{
+  "candidates": [
+    {
+      "cv_accuracy": 0.9513419632191498,
+      "cv_accuracy_std": 0.008221933473122278,
+      "family": "logistic",
+      "macro_f1_5": 0.6886610770078473,
+      "name": "logistic_p0",
+      "oot_accuracy": 0.944177093358999,
+      "oot_macro_f1_5": 0.6783574879227052,
+      "oot_rare_alarms": 1,
+      "power": 0.0
+    },
+    {
+      "cv_accuracy": 0.9510907463318845,
+      "cv_accuracy_std": 0.007653756521334088,
+      "family": "logistic",
+      "macro_f1_5": 0.738856955337137,
+      "name": "logistic_p0.25",
+      "oot_accuracy": 0.933589990375361,
+      "oot_macro_f1_5": 0.8519351931666798,
+      "oot_rare_alarms": 2,
+      "power": 0.25
+    },
+    {
+      "cv_accuracy": 0.9543555600521365,
+      "cv_accuracy_std": 0.006426189054894519,
+      "family": "logodds_blend",
+      "macro_f1_5": 0.7158595356476503,
+      "name": "logodds_blend_p0",
+      "oot_accuracy": 0.9480269489894129,
+      "oot_macro_f1_5": 0.879889042995839,
+      "oot_rare_alarms": 1,
+      "power": 0.0
+    },
+    {
+      "cv_accuracy": 0.9538529487809826,
+      "cv_accuracy_std": 0.006784101096056424,
+      "family": "logodds_blend",
+      "macro_f1_5": 0.7474658234706965,
+      "name": "logodds_blend_p0.25",
+      "oot_accuracy": 0.9403272377285852,
+      "oot_macro_f1_5": 0.8743492678346099,
+      "oot_rare_alarms": 1,
+      "power": 0.25
+    }
+  ],
+  "champion": {
+    "class_weight_power": 0.25,
+    "family": "logodds_blend",
+    "features": {
+      "ngram_range": [
+        1,
+        2
+      ]
+    },
+    "linear": {
+      "C": 3.0,
+      "max_iter": 5000,
+      "solver": "lbfgs"
+    },
+    "linear_weight": 0.7,
+    "name": "logodds_blend_p0.25",
+    "random_state": 0,
+    "scores": {
+      "cv_accuracy": 0.9538529487809826,
+      "cv_accuracy_std": 0.006784101096056424,
+      "family": "logodds_blend",
+      "macro_f1_5": 0.7474658234706965,
+      "name": "logodds_blend_p0.25",
+      "oot_accuracy": 0.9403272377285852,
+      "oot_macro_f1_5": 0.8743492678346099,
+      "oot_rare_alarms": 1,
+      "power": 0.25
+    },
+    "temperature": 1.3924106887623091,
+    "tree": {
+      "colsample_bytree": 0.8,
+      "learning_rate": 0.1,
+      "max_depth": -1,
+      "min_child_samples": 1,
+      "n_estimators": 800,
+      "num_leaves": 31,
+      "reg_lambda": 1.0,
+      "subsample": 0.7
+    }
+  },
+  "created_utc": "2026-10-17T12:38:34+00:00",
+  "decision_trail": [
+    "best macro_f1_5 = 0.7475; best out-of-time accuracy = 0.9480",
+    "logistic_p0: cv 0.9513, macro_f1_5 0.6887, oot 0.9442 -> excluded",
+    "logistic_p0.25: cv 0.9511, macro_f1_5 0.7389, oot 0.9336 -> eligible",
+    "logodds_blend_p0: cv 0.9544, macro_f1_5 0.7159, oot 0.9480 -> excluded",
+    "logodds_blend_p0.25: cv 0.9539, macro_f1_5 0.7475, oot 0.9403 -> eligible",
+    "logodds_blend_p0.25 leads on CV accuracy by at least 0.002 (or is the only eligible candidate): chosen"
+  ],
+  "fallback": {
+    "class_weight_power": 0.0,
+    "family": "logistic",
+    "features": {
+      "ngram_range": [
+        1,
+        2
+      ]
+    },
+    "linear": {
+      "C": 3.0,
+      "max_iter": 5000,
+      "solver": "lbfgs"
+    },
+    "name": "logistic_p0",
+    "random_state": 0,
+    "scores": {
+      "cv_accuracy": 0.9513419632191498,
+      "cv_accuracy_std": 0.008221933473122278,
+      "family": "logistic",
+      "macro_f1_5": 0.6886610770078473,
+      "name": "logistic_p0",
+      "oot_accuracy": 0.944177093358999,
+      "oot_macro_f1_5": 0.6783574879227052,
+      "oot_rare_alarms": 1,
+      "power": 0.0
+    },
+    "temperature": 1.0759452636270137
+  },
+  "review_policy": {
+    "severities": {
+      "ALL_TOKENS_UNSEEN": "critical",
+      "AMOUNT_IMPUTED": "critical",
+      "AMOUNT_OUT_OF_RANGE": "warning",
+      "DATE_IMPUTED": "critical",
+      "DATE_OUT_OF_RANGE": "warning",
+      "LOW_CONFIDENCE": "critical",
+      "ROW_STRUCTURE_SUSPECT": "critical",
+      "TEXT_MISSING": "critical",
+      "TEXT_TRUNCATED": "info",
+      "UNSEEN_ACCOUNT": "critical",
+      "UNSEEN_DOC_TYPE": "warning",
+      "UNSEEN_VENDOR": "critical",
+      "UNSEEN_VENDOR_ACCOUNT_PAIR": "warning"
+    },
+    "threshold": 0.8
+  },
+  "tuning_quick_mode": false
+}

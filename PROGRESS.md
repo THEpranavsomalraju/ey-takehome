@@ -4,7 +4,7 @@ Living log. Updated after every gate run and every session. Format rules: docs/0
 
 ## Current phase
 
-Block C (Phases 4 and 5): models, benchmark, tuning, selection, calibration. Status: IN PROGRESS
+Block E: AI agent, relay, API server (Part 2 backend). Status: IN PROGRESS
 
 Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay, and API server.
 
@@ -16,10 +16,10 @@ Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay,
 | 1 | Data contract, labels, split (item E) | DONE (block A) | see git log "feat: scaffold" |
 | 2 | Exploratory analysis (item F) | DONE (block B) | see git log "feat: exploratory analysis" |
 | 3 | Preprocessing and features | DONE (block B) | see git log "feat: exploratory analysis" |
-| 4 | Models, CV runner, benchmark | NOT STARTED | |
-| 5 | Tuning, blend, selection, calibration (items A to D) | NOT STARTED | |
-| 6 | Final training, artifacts, explanations | NOT STARTED | |
-| 7 | Prediction service and robustness | NOT STARTED | |
+| 4 | Models, CV runner, benchmark | DONE | c1c54e3 |
+| 5 | Tuning, blend, selection, calibration (items A to D) | DONE | see git log "feat: logged tuning" |
+| 6 | Final training, artifacts, explanations | DONE | see git log "feat: logged tuning" |
+| 7 | Prediction service and robustness | DONE (edge-case breaker round 2 pending) | see git log "feat: logged tuning" |
 | 8 | Modeling notebook, docs, holdout evaluation | NOT STARTED (holdout waits for user approval) | |
 | 9 | Clean room, cross-platform, packaging, final review | NOT STARTED | |
 
@@ -27,10 +27,10 @@ Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay,
 
 | Item | Description | Status | Evidence |
 |---|---|---|---|
-| A | Champion confirmed across 3 seeds by the decision rule | | |
-| B | Logged hyperparameter search plus nested CV | | |
-| C | Log-odds blend with exact additive contributions | | |
-| D | Calibration check and temperature scaling | | |
+| A | Champion confirmed across 3 seeds by the decision rule | DONE | logodds_blend_p0.25; reports/selection/champion_decision.json; D11 |
+| B | Logged hyperparameter search plus nested CV | DONE | reports/tuning/*_trials.csv (30 + 40 + 10 trials), nested_cv.json (0.9548 +- 0.005) |
+| C | Log-odds blend with exact additive contributions | DONE | max additivity gap 7e-12 over 590 holdout-feature rows; test_x05, test_blend_contributions_are_exactly_additive; blend_comparison.csv (+0.0008 vs probability blend) |
+| D | Calibration check and temperature scaling | DONE | T=1.39, ECE 0.019 -> 0.0066; threshold 0.8 (D14, D17) |
 | E | Holdout seed fixed by written rule before modeling | DONE | D03 committed before the split; `data/splits/split_manifest.json` (seed 0, 590 rows) |
 | F | Full EDA coverage | DONE | 25 reports in reports/eda (Cramer's V, mutual information, outliers, missing values), notebooks/01_eda.ipynb |
 
@@ -77,12 +77,42 @@ Schedule per DECISIONS.md D24: blocks 0+1, 2+3, 4+5, 6+7, then the agent, relay,
 - [x] Every output feature maps to exactly one group (evidence: test_every_feature_maps_to_exactly_one_group)
 - [x] Notebook executes cleanly (evidence: notebooks/02_preprocessing.ipynb, 1.0s)
 
+## Acceptance criteria (Phases 4 to 7)
+
+- [x] Leaderboard holds every docs/04 section 4 model with mean and std over 3 seeds and fit seconds (reports/benchmark/leaderboard.csv)
+- [x] All reference ranges pass (tools/check_reference_ranges.py: 11 ranges and 3 directions; unseen-vendor reference compared like for like with balanced logistic, Exp 7)
+- [x] Random-split accuracy exceeds grouped accuracy (0.9636 > 0.9493)
+- [x] Class weight dial reproduces the direction (false rare alarms 1 -> 15 as power rises)
+- [x] benchmark --quick under 3 minutes (72 s); full run recorded
+- [x] Additivity within 1e-6 for training rows and every holdout-feature row (max gap 7e-12)
+- [x] blend_comparison.csv exists; log-odds blend 0.0008 above the probability blend
+- [x] Trial logs for all three searches, search space, nested_cv.json
+- [x] Champion by the pre-registered rule, trail in champion_decision.json, D10 and D11 updated
+- [x] Calibration summary, temperature, threshold by rule, D14 and D17 updated
+- [x] Accuracy-by-flag report and D18 policy
+- [x] model_fallback.joblib unpickles with LightGBM blocked (test_e01_fallback_bundle_unpickles_without_lightgbm)
+- [x] Golden file matches predict_file on holdout .xlsx and .csv (test_r04, tools/compare_golden.py: max diff 5e-11)
+- [x] Reproducibility: blend fits are deterministic (test_blend_is_deterministic); split byte-identical
+- [x] Every explanation payload passes json.dumps, schema keys match, additivity within 1e-6 (test_x03, test_x05)
+- [x] metadata.json holds every docs/02 section 6 field
+- [x] Every catalog ID (79) has a passing test; gate check 8 PASS
+- [x] Performance budgets met: 590 rows 195 ms, 100,000 rows within 120 s (test_p03), one explanation 27 ms
+- [x] Fallback path end to end with LEDGERCLF_FORCE_FALLBACK=1 and with LightGBM blocked (test_e12, test_e01)
+- [x] doctor shows all checks (15 PASS), exit codes correct
+
 ## Iteration log
 
 | Cycle | Date | Gate | Critical | Warning | Suggestion | Notes |
 |---|---|---|---|---|---|---|
 | A1 | 2026-10-17 | full PASS 22s | 6 (code) + 9 (edge) | 11 (code) + 3 (leakage) + 14 (edge) | 9 + 3 | Block A review round: every Critical and Warning fixed (details below) |
-| B1 | 2026-10-17 | full PASS 33s | - | - | - | Block B built; review round launched |
+| B1 | 2026-10-17 | full PASS 33s | 0 (leakage) | 3 (leakage) | 1 | Block B leakage audit: all fixed. Code review round interrupted by a usage limit; rerun with block C/D |
+| CD1 | 2026-10-17 | full PASS 134s | - | - | - | Phases 4 to 7 built; 431 tests; review round next |
+
+## Findings during block C/D
+
+- reg_lambda = 0 in the LightGBM search space made one-row classes explode (raw scores up to 51,830; one fold collapsed to the majority rate). Removed from the space (D29).
+- Log-odds blending at power 0 loses rare-class recall; the macro F1 guardrail of the pre-registered rule excluded that candidate.
+- Explanation text now names the base rate when the class prior carries the prediction.
 
 ## Findings and fixes during block A
 

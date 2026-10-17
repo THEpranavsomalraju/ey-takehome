@@ -9,7 +9,6 @@ from __future__ import annotations
 import importlib
 import importlib.metadata
 import logging
-import os
 import platform
 import sys
 import tempfile
@@ -20,12 +19,11 @@ from enum import StrEnum
 from ledgerclf.config import (
     EXIT_ENVIRONMENT_ERROR,
     EXIT_OK,
-    FORCE_FALLBACK_ENV,
     HOLDOUT_FEATURES_STEM,
     SUPPORTED_PYTHON,
-    Limits,
     Settings,
 )
+from ledgerclf.environment import lightgbm_status
 
 logger = logging.getLogger(__name__)
 
@@ -173,26 +171,6 @@ def check_packages(settings: Settings) -> list[CheckResult]:
     return results
 
 
-def lightgbm_status(limits: Limits | None = None) -> tuple[bool, str]:
-    """Report whether LightGBM imports, honoring the forced-fallback variable.
-
-    Args:
-        limits: Provides the maximum length of the error detail.
-
-    Returns:
-        Tuple of (available, reason).
-    """
-    limits = limits or Limits()
-    if os.environ.get(FORCE_FALLBACK_ENV) == "1":
-        return False, f"{FORCE_FALLBACK_ENV}=1 forces the fallback model"
-    try:
-        lightgbm = importlib.import_module("lightgbm")
-    except (ImportError, OSError) as error:
-        first_line = next(iter(str(error).splitlines()), "no message")
-        return False, f"{type(error).__name__}: {first_line[: limits.message_detail_chars]}"
-    return True, f"lightgbm {lightgbm.__version__}"
-
-
 def check_lightgbm() -> CheckResult:
     """Check 4: LightGBM import. A failure activates the fallback model.
 
@@ -283,15 +261,65 @@ def default_model_checks() -> ModelChecks:
         A callable producing the model checks.
     """
     try:
-        from ledgerclf.artifacts import doctor_model_checks
-    except ModuleNotFoundError as error:
-        if error.name != "ledgerclf.artifacts":
-            raise
-        return _artifacts_unavailable("model checks not available in this build")
+        import ledgerclf.artifacts  # noqa: F401 - probe: the modeling stack must import
     except ImportError as error:
         logger.warning("Model checks failed to load: %s", error)
         return _artifacts_unavailable(f"model checks failed to load: {type(error).__name__}")
-    return doctor_model_checks
+    return model_checks
+
+
+def model_checks(settings: Settings) -> list[CheckResult]:
+    """Checks 5, 6, and 9: artifacts load, reference statistics exist, self-test matches.
+
+    Args:
+        settings: Project settings.
+
+    Returns:
+        One result per check.
+    """
+    from ledgerclf import artifacts
+    from ledgerclf.exceptions import ArtifactError
+
+    paths = settings.paths
+    if not (paths.artifacts / artifacts.FALLBACK_BUNDLE).exists():
+        return [
+            CheckResult("artifacts", Status.WARN, "no trained model yet", artifacts.RETRAIN_FIX)
+        ]
+    try:
+        metadata = artifacts.read_metadata(paths)
+        bundle, reason = artifacts.load_best_available(paths)
+    except ArtifactError as error:
+        return [CheckResult("artifacts", Status.FAIL, error.message, artifacts.RETRAIN_FIX)]
+    detail = f"{bundle.name} loaded (trained {metadata.get('created_utc', 'unknown')})"
+    if reason:
+        detail += f"; fallback active: {reason}"
+    reference_ok = (paths.artifacts / artifacts.REFERENCE_FILE).exists()
+    return [
+        CheckResult("artifacts", Status.PASS, detail),
+        CheckResult(
+            "reference statistics",
+            Status.PASS if reference_ok else Status.FAIL,
+            artifacts.REFERENCE_FILE,
+            artifacts.RETRAIN_FIX,
+        ),
+        _self_test(settings, bundle),
+    ]
+
+
+def _self_test(settings: Settings, bundle: object) -> CheckResult:
+    from ledgerclf.predict import self_test
+
+    fix = "Run: python -m ledgerclf train"
+    try:
+        matched, total = self_test(settings, bundle)
+    except Exception as error:  # boundary: any self-test failure becomes a FAIL check
+        logger.debug("Self-test failed", exc_info=True)
+        return CheckResult(
+            "self-test prediction", Status.FAIL, f"{type(error).__name__}: {error}", fix
+        )
+    status = Status.PASS if matched == total else Status.WARN
+    detail = f"{matched}/{total} sample rows match the expected predictions"
+    return CheckResult("self-test prediction", status, detail, "" if matched == total else fix)
 
 
 def run_doctor(

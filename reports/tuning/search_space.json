@@ -1,0 +1,118 @@
+{
+  "blend": {
+    "linear_weight": [
+      0.3,
+      0.4,
+      0.5,
+      0.6,
+      0.7
+    ],
+    "power": [
+      0.0,
+      0.25
+    ]
+  },
+  "cv": "StratifiedGroupKFold(5, shuffle=True, random_state=0) with the group key",
+  "linear": {
+    "C": [
+      1.0,
+      3.0,
+      10.0,
+      30.0,
+      100.0
+    ],
+    "ngram_range": [
+      [
+        1,
+        1
+      ],
+      [
+        1,
+        2
+      ]
+    ],
+    "power": [
+      0.0,
+      0.25,
+      0.5
+    ]
+  },
+  "metric": "accuracy (macro_f1_5 logged beside it)",
+  "nested": {
+    "blend_weight": [
+      0.4,
+      0.5,
+      0.6
+    ],
+    "inner": "StratifiedGroupKFold(3, shuffle=True, random_state=0)",
+    "linear_C": [
+      1.0,
+      3.0,
+      10.0,
+      30.0,
+      100.0
+    ],
+    "linear_power": [
+      0.0,
+      0.25,
+      0.5
+    ],
+    "outer": "StratifiedGroupKFold(5, shuffle=True, random_state=0)",
+    "tree_random_trials": 15
+  },
+  "quick_mode": false,
+  "tree": {
+    "random_state": 0,
+    "random_trials": 40,
+    "space": {
+      "colsample_bytree": [
+        0.3,
+        0.5,
+        0.8
+      ],
+      "learning_rate": [
+        0.03,
+        0.05,
+        0.1
+      ],
+      "max_depth": [
+        -1,
+        6,
+        8,
+        12
+      ],
+      "min_child_samples": [
+        1,
+        2,
+        3,
+        5,
+        10,
+        20
+      ],
+      "n_estimators": [
+        300,
+        500,
+        800
+      ],
+      "num_leaves": [
+        15,
+        31,
+        63
+      ],
+      "power": [
+        0.0,
+        0.25
+      ],
+      "reg_lambda": [
+        1.0,
+        2.0,
+        5.0
+      ],
+      "subsample": [
+        0.7,
+        0.8,
+        1.0
+      ]
+    }
+  }
+}

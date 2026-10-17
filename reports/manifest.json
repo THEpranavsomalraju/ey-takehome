@@ -534,6 +534,256 @@
       "file": "preprocessing/transformer_catalog.json",
       "producer": "eda",
       "title": "Transformer catalog"
+    },
+    {
+      "columns": [
+        "flag",
+        "rows",
+        "accuracy",
+        "severity"
+      ],
+      "description": "Out-of-fold accuracy of rows carrying each risk flag, with fold-specific reference statistics; sets flag severities (D18).",
+      "file": "selection/accuracy_by_flag.csv",
+      "producer": "select",
+      "title": "Accuracy by flag"
+    },
+    {
+      "columns": [
+        "model",
+        "power",
+        "cv_accuracy",
+        "cv_accuracy_std",
+        "macro_f1_5",
+        "accuracy_gap_vs_probability_blend"
+      ],
+      "description": "The same tuned members blended in logit space (exact explanations) or by averaging probabilities.",
+      "file": "selection/blend_comparison.csv",
+      "producer": "select",
+      "title": "Log-odds versus probability blend"
+    },
+    {
+      "columns": [
+        "bin_low",
+        "bin_high",
+        "rows",
+        "mean_confidence",
+        "accuracy",
+        "model",
+        "stage"
+      ],
+      "description": "Confidence bins with mean confidence and accuracy, for champion and fallback.",
+      "file": "selection/calibration_reliability.csv",
+      "producer": "select",
+      "title": "Reliability before and after temperature scaling"
+    },
+    {
+      "columns": [
+        "champion",
+        "ece_target",
+        "fallback",
+        "logistic_p0",
+        "logodds_blend_p0.25",
+        "seed"
+      ],
+      "description": "Temperatures, ECE, Brier score, and log loss before and after temperature scaling.",
+      "file": "selection/calibration_summary.json",
+      "producer": "select",
+      "title": "Calibration summary"
+    },
+    {
+      "columns": [
+        "name",
+        "family",
+        "power",
+        "cv_accuracy",
+        "cv_accuracy_std",
+        "macro_f1_5",
+        "oot_accuracy",
+        "oot_macro_f1_5",
+        "oot_rare_alarms"
+      ],
+      "description": "The four pre-registered candidates with tuned parameters: grouped CV accuracy (3 seeds, 15 folds), macro F1 over five classes, and out-of-time accuracy.",
+      "file": "selection/champion_candidates.csv",
+      "producer": "select",
+      "title": "Champion candidates"
+    },
+    {
+      "columns": [
+        "champion",
+        "eligible",
+        "fallback",
+        "rule",
+        "trail",
+        "tuning_quick_mode"
+      ],
+      "description": "The decision rule of DECISIONS.md D11 applied step by step, with the chosen champion and fallback.",
+      "file": "selection/champion_decision.json",
+      "producer": "select",
+      "title": "Champion decision"
+    },
+    {
+      "columns": [
+        "row_id",
+        "Col1",
+        "Col4",
+        "Col6",
+        "Col5",
+        "amount",
+        "true_label",
+        "predicted_label",
+        "confidence"
+      ],
+      "description": "Out-of-fold errors made with calibrated confidence of 0.9 or more: candidates for client label review (D21).",
+      "file": "selection/high_confidence_errors.csv",
+      "producer": "select",
+      "title": "High-confidence errors"
+    },
+    {
+      "columns": [
+        "class",
+        "precision",
+        "recall",
+        "f1",
+        "support"
+      ],
+      "description": "Champion, grouped CV seed 0: precision, recall, F1, and support per class.",
+      "file": "selection/oof_classification_report.csv",
+      "producer": "select",
+      "title": "Out-of-fold classification report"
+    },
+    {
+      "columns": [
+        "true_label",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6"
+      ],
+      "description": "Champion, grouped CV seed 0: true class (rows) versus predicted class (columns).",
+      "file": "selection/oof_confusion_matrix.csv",
+      "producer": "select",
+      "title": "Out-of-fold confusion matrix"
+    },
+    {
+      "columns": [
+        "threshold",
+        "coverage",
+        "accuracy_kept",
+        "accuracy_flagged",
+        "rows_flagged",
+        "chosen"
+      ],
+      "description": "Coverage and accuracy when rows below each calibrated confidence threshold go to review; the chosen threshold follows D17.",
+      "file": "selection/threshold_table.csv",
+      "producer": "select",
+      "title": "Confidence threshold table"
+    },
+    {
+      "columns": [
+        "blend_weight_by_power",
+        "linear_by_power",
+        "ngram_range_by_power",
+        "quick_mode",
+        "tree"
+      ],
+      "description": "Best configuration per class weight power; input to the select command.",
+      "file": "tuning/best_params.json",
+      "producer": "tune",
+      "title": "Best parameters"
+    },
+    {
+      "columns": [
+        "trial_id",
+        "linear_weight",
+        "mean_accuracy",
+        "std_accuracy",
+        "mean_macro_f1_5",
+        "std_macro_f1_5",
+        "mean_fit_seconds",
+        "rank_accuracy",
+        "power",
+        "C",
+        "ngram_range"
+      ],
+      "description": "Linear weight of the log-odds blend at each class weight power, with the best members.",
+      "file": "tuning/blend_trials.csv",
+      "producer": "tune",
+      "title": "Blend weight trials"
+    },
+    {
+      "columns": [
+        "trial_id",
+        "ngram_range",
+        "C",
+        "power",
+        "mean_accuracy",
+        "std_accuracy",
+        "mean_macro_f1_5",
+        "std_macro_f1_5",
+        "mean_fit_seconds",
+        "rank_accuracy"
+      ],
+      "description": "Grid search over C, class weight power, and n-gram range (grouped 5-fold CV).",
+      "file": "tuning/linear_trials.csv",
+      "producer": "tune",
+      "title": "Logistic regression trials"
+    },
+    {
+      "columns": [
+        "non_nested_best_accuracy",
+        "optimism_gap",
+        "outer_accuracy_mean",
+        "outer_accuracy_std",
+        "outer_folds",
+        "outer_macro_f1_5_mean",
+        "outer_macro_f1_5_std",
+        "quick_mode"
+      ],
+      "description": "Unbiased accuracy of the whole tuning procedure: searches rerun inside each outer fold.",
+      "file": "tuning/nested_cv.json",
+      "producer": "tune",
+      "title": "Nested CV"
+    },
+    {
+      "columns": [
+        "blend",
+        "cv",
+        "linear",
+        "metric",
+        "nested",
+        "quick_mode",
+        "tree"
+      ],
+      "description": "Every searched hyperparameter, its values, the trial budget, and the CV scheme.",
+      "file": "tuning/search_space.json",
+      "producer": "tune",
+      "title": "Search space"
+    },
+    {
+      "columns": [
+        "trial_id",
+        "power",
+        "subsample",
+        "reg_lambda",
+        "num_leaves",
+        "n_estimators",
+        "min_child_samples",
+        "max_depth",
+        "learning_rate",
+        "colsample_bytree",
+        "mean_accuracy",
+        "std_accuracy",
+        "mean_macro_f1_5",
+        "std_macro_f1_5",
+        "mean_fit_seconds",
+        "rank_accuracy"
+      ],
+      "description": "Random search over LightGBM parameters and class weight power (grouped 5-fold CV).",
+      "file": "tuning/tree_trials.csv",
+      "producer": "tune",
+      "title": "LightGBM trials"
     }
   ]
 }

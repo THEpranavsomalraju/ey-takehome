@@ -17,10 +17,10 @@ from ledgerclf.doctor import (
     check_python,
     check_writable,
     format_report,
-    lightgbm_status,
     required_pins,
     run_doctor,
 )
+from ledgerclf.environment import lightgbm_status
 from ledgerclf.exceptions import ArtifactError, LedgerClfError
 from ledgerclf.logging_setup import AsciiFormatter, configure
 

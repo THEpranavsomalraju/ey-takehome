@@ -1,0 +1,24 @@
+{
+  "champion": "logodds_blend_p0.25",
+  "ece_target": 0.03,
+  "fallback": "logistic_p0",
+  "logistic_p0": {
+    "brier_after": 0.0713234577574997,
+    "brier_before": 0.07150698731201675,
+    "ece_after": 0.005583777167566681,
+    "ece_before": 0.008543104442935847,
+    "log_loss_after": 0.12507227625641137,
+    "log_loss_before": 0.12558170234043672,
+    "temperature": 1.0759452636270137
+  },
+  "logodds_blend_p0.25": {
+    "brier_after": 0.06669045897119356,
+    "brier_before": 0.06896551187014507,
+    "ece_after": 0.0066333818453781085,
+    "ece_before": 0.018933662224919545,
+    "log_loss_after": 0.11891670620289696,
+    "log_loss_before": 0.1297487151297403,
+    "temperature": 1.3924106887623091
+  },
+  "seed": 0
+}

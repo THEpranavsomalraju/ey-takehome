@@ -173,10 +173,13 @@ class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
     ``z = (w * z_linear + (1 - w) * z_tree) / T`` and ``p = softmax(z)``.
     Averaging logits instead of probabilities keeps every prediction an exact
     sum of per-feature contributions, which the explanation agent reports.
+    With ``tree=None`` the model is a temperature-scaled logistic regression:
+    the fallback when LightGBM cannot load, with the same explanation path
+    and no LightGBM object in its pickle.
 
     Args:
         linear: Unfitted ``PoweredClassWeight(LogisticRegression)``.
-        tree: Unfitted ``PoweredClassWeight(LGBMClassifier)``.
+        tree: Unfitted ``PoweredClassWeight(LGBMClassifier)``, or None.
         linear_weight: Weight ``w`` of the linear logits.
         temperature: Calibration temperature ``T`` (1.0 until calibrated).
     """
@@ -197,15 +200,24 @@ class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
         """Fit both members on the same feature matrix."""
         y_array = np.asarray(y, dtype=object)
         self.linear_ = clone(self.linear).fit(X, y_array)
-        self.tree_ = clone(self.tree).fit(X, y_array)
-        if [str(c) for c in self.linear_.classes_] != [str(c) for c in self.tree_.classes_]:
+        self.tree_ = None if self.tree is None else clone(self.tree).fit(X, y_array)
+        if self.tree_ is not None and [str(c) for c in self.linear_.classes_] != [
+            str(c) for c in self.tree_.classes_
+        ]:
             raise ValueError("Blend members learned different class orders.")
         self.classes_ = np.asarray(CANONICAL_CLASSES, dtype=object)
         return self
 
+    @property
+    def effective_weight(self) -> float:
+        """Return the linear weight actually used (1.0 when there is no tree member)."""
+        return 1.0 if self.tree is None else float(self.linear_weight)
+
     def _member_logits(self, X: Any) -> tuple[np.ndarray, np.ndarray]:
         classes = self.linear_.classes_
         linear = to_canonical(self.linear_.decision_function(X), classes, ABSENT_CLASS_LOGIT)
+        if self.tree_ is None:
+            return linear, np.zeros_like(linear)
         with quiet_feature_name_check():
             raw = self.tree_.estimator_.predict(X, raw_score=True)
         tree = to_canonical(np.asarray(raw), classes, ABSENT_CLASS_LOGIT)
@@ -214,7 +226,7 @@ class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
     def decision_function(self, X: Any) -> np.ndarray:
         """Return blended logits divided by the temperature, canonical class order."""
         linear, tree = self._member_logits(X)
-        weight = self.linear_weight
+        weight = self.effective_weight
         return (weight * linear + (1.0 - weight) * tree) / self.temperature
 
     def predict_proba(self, X: Any) -> np.ndarray:
@@ -242,8 +254,11 @@ class LogOddsBlendClassifier(BaseEstimator, ClassifierMixin):
         """
         matrix = sp.csr_matrix(X)
         linear_values, linear_bias = _linear_contributions(self.linear_.estimator_, matrix)
-        tree_values, tree_bias = _tree_contributions(self.tree_.estimator_, matrix)
-        weight, temperature = self.linear_weight, self.temperature
+        if self.tree_ is None:
+            tree_values, tree_bias = np.zeros_like(linear_values), np.zeros_like(linear_bias)
+        else:
+            tree_values, tree_bias = _tree_contributions(self.tree_.estimator_, matrix)
+        weight, temperature = self.effective_weight, self.temperature
         values = (weight * linear_values + (1 - weight) * tree_values) / temperature
         bias = (weight * linear_bias + (1 - weight) * tree_bias) / temperature
         return Contributions(values=values, bias=bias, logits=self.decision_function(matrix))
@@ -417,6 +432,24 @@ def make_blend(
         tree=PoweredClassWeight(lightgbm_classifier(tree, random_state), tree.class_weight_power),
         linear_weight=blend.linear_weight,
         temperature=blend.temperature,
+    )
+    return Pipeline(
+        [("features", build_feature_pipeline(features or FeatureParams())), ("model", model)]
+    )
+
+
+def make_calibrated_logistic(
+    linear: LinearParams, temperature: float, features: FeatureParams | None = None
+) -> Pipeline:
+    """Return features plus a temperature-scaled logistic regression (the fallback model)."""
+    model = LogOddsBlendClassifier(
+        linear=PoweredClassWeight(
+            LogisticRegression(C=linear.C, max_iter=linear.max_iter, solver=linear.solver),
+            linear.class_weight_power,
+        ),
+        tree=None,
+        linear_weight=1.0,
+        temperature=temperature,
     )
     return Pipeline(
         [("features", build_feature_pipeline(features or FeatureParams())), ("model", model)]

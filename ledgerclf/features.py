@@ -65,6 +65,8 @@ TRANSFORMERS: dict[str, tuple[str, str]] = {
     "col2_format": (GROUP_INVOICE, "invoice"),
 }
 DEFAULT_TRANSFORMERS: tuple[str, ...] = tuple(n for n in TRANSFORMERS if n != "col2_format")
+# Name sklearn's OneHotEncoder gives the bucket of values seen fewer than min_frequency times.
+INFREQUENT_CATEGORY = "infrequent_sklearn"
 _TOKEN_COLUMNS = {
     "col1_tokens": COL_VENDOR,
     "col4_tokens": COL_DESCRIPTION,
@@ -393,4 +395,6 @@ def readable_feature_name(feature_name: str) -> str:
     if transformer in (*_VALUE_COLUMNS, "pair", "col7"):
         # One-hot names carry the input column as a prefix: "Col1_word16 word17".
         rest = rest.split("_", 1)[1] if "_" in rest else rest
+        if rest == INFREQUENT_CATEGORY:
+            rest = "(rare or unseen value)"
     return f"{prefix}:{rest}" if prefix else rest

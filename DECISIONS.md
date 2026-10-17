@@ -138,23 +138,30 @@ Alternatives: macro F1 as the primary metric (pushed toward balanced weights, wh
 
 ## D10. Class weight power
 
-Status: Pending (Phase 5). Candidates: 0 and 0.25.
+Status: Accepted (Phase 5). Chosen: 0.25 (through the champion rule, D11).
 
 Context: balanced weights count one C3 row as 227 C1 rows and produced 67 false rare-class alarms out of time.
 
 Evidence (exploration): blend power 0: CV 0.9559, out-of-time 0.942. Power 0.25: 0.9541, 0.938. Power 0.5: 0.9532, 0.935. LR power 1.0: out-of-time 0.874, below the 0.887 majority rate (Exp 9, Exp 11).
 
-Result: (fill in after Phase 5)
+Result: the class weight dial (reports/benchmark/class_weight_dial.csv, 3 seeds) reproduces the exploration direction: logistic out-of-time false rare alarms 1, 2, 5, 9, 15 for powers 0 to 1. At power 0 the log-odds blend loses rare-class recall (Category_3 0.78) because confident LightGBM logits outvote the linear member; power 0.25 restores it (Category_3 0.95, macro_f1_5 0.75). The champion rule picked power 0.25.
 
 ## D11. Champion decision rule and champion model
 
-Status: Rule accepted now. Champion pending (Phase 5).
+Status: Accepted. Champion: logodds_blend_p0.25.
 
 Rule: docs/04 section 8, recorded here before running `select`. Candidates: logistic power 0, logistic power 0.25, log-odds blend power 0, log-odds blend power 0.25.
 
 Expectation (exploration): log-odds blend of logistic regression and LightGBM leads on accuracy in grouped CV and out of time.
 
-Result: (fill in after Phase 5: chosen config, scores of all candidates, trail)
+Result (reports/selection/champion_decision.json, tuned parameters from reports/tuning/best_params.json):
+
+- logistic_p0: CV accuracy 0.9513 (std 0.0082), macro_f1_5 0.6887, out-of-time 0.9442
+- logistic_p0.25: CV accuracy 0.9511 (std 0.0077), macro_f1_5 0.7389, out-of-time 0.9336
+- logodds_blend_p0: CV accuracy 0.9544 (std 0.0064), macro_f1_5 0.7159, out-of-time 0.9480
+- logodds_blend_p0.25: CV accuracy 0.9539 (std 0.0068), macro_f1_5 0.7475, out-of-time 0.9403
+
+Trail: best macro_f1_5 0.7475 and best out-of-time 0.9480. logistic_p0 (macro_f1_5 0.6887) and logodds_blend_p0 (0.7159, below the 0.7175 floor) are excluded by the macro F1 guardrail. Of the eligible candidates, logodds_blend_p0.25 leads logistic_p0.25 on CV accuracy by 0.0028 (above the 0.002 tie margin): chosen. Fallback: logistic_p0, the most accurate logistic candidate. Champion configuration: logistic C=3 with unigrams and bigrams, LightGBM 800 trees (learning rate 0.1, 31 leaves, min_child_samples 1, reg_lambda 1, colsample 0.8, subsample 0.7), linear weight 0.7, class weight power 0.25 for both members. Nested CV of the tuning procedure: outer accuracy 0.9548 +- 0.0050 versus 0.9540 non-nested (gap -0.0008).
 
 ## D12. LightGBM minimum leaf size of 2
 
@@ -174,13 +181,13 @@ Consequences: CatBoost appears on the leaderboard as a research row only, with a
 
 ## D14. Calibration by temperature scaling
 
-Status: Pending (Phase 5)
+Status: Accepted
 
 Decision: one temperature on out-of-fold blended logits. Preserves accuracy and the additivity of log-odds contributions.
 
 Alternatives: isotonic or sigmoid calibration (breaks exact explanations).
 
-Result: (fill in: temperature, ECE before and after, Brier, log loss)
+Result (reports/selection/calibration_summary.json, grouped CV seed 0): champion T = 1.392; ECE 0.0189 -> 0.0066 (target 0.03 met); Brier 0.0690 -> 0.0667; log loss 0.1297 -> 0.1189. Fallback T = 1.076; ECE 0.0085 -> 0.0056.
 
 ## D15. Fallback model when LightGBM fails to load
 
@@ -204,23 +211,23 @@ Rationale: a model trained on the holdout would score its own training rows in t
 
 ## D17. Confidence threshold for review routing
 
-Status: Pending (Phase 5)
+Status: Accepted
 
 Rule: lowest threshold whose kept accuracy on calibrated out-of-fold probabilities reaches 0.975.
 
 Evidence (exploration, uncalibrated LR): threshold 0.9 kept 92.2% of rows at 97.6% accuracy, flagged rows at 64% accuracy (Exp 10).
 
-Result: (fill in)
+Result: threshold 0.8 (reports/selection/threshold_table.csv): 92.7% of rows kept at 97.9% out-of-fold accuracy; the 7.3% flagged are 63.4% accurate. 0.7 keeps 97.5% exactly (0.9748, just under the target).
 
 ## D18. Row flags and review policy
 
-Status: Pending (Phase 5)
+Status: Accepted
 
 Context: unseen vendors drop accuracy to near the majority baseline (grouped-by-vendor CV 0.891). Unseen vendor-account pairs: 0.888 in grouped CV, 0.728 out of time with balanced weights.
 
 Decision draft: critical flags (review required) for unseen vendor, all tokens unseen, missing Col1 or Col6, imputed amount or date, low confidence. Warnings for unseen account, unseen pair, unseen document type, out-of-range values.
 
-Result: (fill in with accuracy-by-flag evidence)
+Result (reports/selection/accuracy_by_flag.csv, out-of-fold with fold-specific reference statistics; rule in config.FlagPolicyParams: critical when a flag's accuracy is more than 0.05 below the overall 0.954 on at least 10 rows, otherwise warning; flags with fewer rows keep their default): UNSEEN_VENDOR 154 rows, 0.896 -> critical; UNSEEN_ACCOUNT 112 rows, 0.893 -> critical (upgraded from warning by evidence); UNSEEN_VENDOR_ACCOUNT_PAIR 377 rows, 0.936 -> warning; LOW_CONFIDENCE 385 rows, 0.634 -> critical. Flags that never occur in training (imputed values, missing text, out-of-range values) keep their defaults. A new flag ROW_STRUCTURE_SUSPECT (critical) marks rows with extra fields or an unclosed quote in the uploaded file. Rows with no flag: 0.982 accuracy.
 
 ## D19. Category_5 handling
 
@@ -244,11 +251,13 @@ Status: Accepted
 
 ## D21. High-confidence errors as label-review candidates
 
-Status: Pending (Phase 5)
+Status: Accepted
 
 Context: 132 wrong predictions with probability 0.9 or higher in exploration, mostly C1 versus C2.
 
 Decision: publish `reports/selection/high_confidence_errors.csv` as a client review list instead of altering labels.
+
+Result: 53 out-of-fold errors with calibrated confidence of 0.9 or more (training portion only).
 
 ## D22. Group key uses the monthly period, not the full date
 
@@ -319,3 +328,21 @@ Context: docs/05 section 2.5 reads a column day-first when any value has a first
 Decision: a value counts as day-first evidence only when it is a valid day-first date (`31/08/2018`), and as month-first evidence only when it is a valid month-first date (`08/31/2018`). The majority wins; mixed evidence raises the WARNING `DATE_ORDER_MIXED`. Without evidence the column reads month-first with the INFO issue `DATE_ORDER_ASSUMED_MONTH_FIRST`, as before.
 
 Evidence: tests/adversarial/test_value_parsing.py::test_invalid_date_does_not_flip_other_rows_to_day_first, tests/edge_cases/test_value_level.py::test_v12_*.
+
+## D29. LightGBM search space excludes reg_lambda = 0
+
+Status: Accepted (2026-10-17, before the full tuning run)
+
+Context: docs/04 section 7 lists `reg_lambda` in (0, 1, 2, 5). The quick tuning run picked a configuration with `reg_lambda=0` (15 leaves, min_child_samples 3) because its mean CV accuracy ranked first, yet on one fold it predicted Category_1 for every row (accuracy 0.8842, the majority rate).
+
+Decision: search `reg_lambda` in (1, 2, 5) only. Without L2 regularization, a class with one or two training rows has a near-zero hessian, so its leaf values explode and dominate the logits.
+
+Evidence: same configuration on the 5 primary folds (seed 0). reg_lambda 0: fold accuracy 0.951, 0.919, 0.884, 0.957, 0.951; largest raw score 51,830. reg_lambda 1: 0.949, 0.944, 0.940, 0.953, 0.943; largest raw score 11.8. reg_lambda 2: largest raw score 10.9.
+
+Consequences: a numerically stable tree member, and a mean CV accuracy that no longer hides a collapsed fold. Test: tests/unit/test_tuning.py::test_tree_space_keeps_l2_regularization.
+
+## D30. Fallback model as a tree-less blend; artifact file names
+
+Status: Accepted
+
+Decision: the fallback is `LogOddsBlendClassifier(tree=None)`: a temperature-scaled logistic regression with the same explanation code path and zero LightGBM objects in its pickle (test e01 unpickles it with LightGBM blocked). Artifacts are named `model_champion.joblib` and `model_fallback.joblib` (docs/02 used `model_blend.joblib`), because the champion rule could have chosen a logistic model.
