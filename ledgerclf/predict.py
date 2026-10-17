@@ -324,13 +324,15 @@ def _attach_labels(
 ) -> pd.DataFrame:
     if metrics is None:
         return predictions
-    canonical, _ = normalize_labels(frame[LABEL_COLUMN])
-    table = predictions.copy()
-    table["true_label"] = canonical.to_numpy(dtype=object)
-    table["correct"] = [
+    labels = normalize_labels(frame[LABEL_COLUMN])[0].to_numpy(dtype=object)
+    correct = [
         None if label is None else bool(label == predicted)
-        for label, predicted in zip(table["true_label"], table["predicted_label"], strict=True)
+        for label, predicted in zip(labels, predictions["predicted_label"], strict=True)
     ]
+    table = predictions.copy()
+    # Object Series keep None for unlabeled rows under pandas 2 and 3.
+    table["true_label"] = pd.Series(labels, index=table.index, dtype=object)
+    table["correct"] = pd.Series(correct, index=table.index, dtype=object)
     return table
 
 

@@ -50,6 +50,7 @@ _DELIMITERS = (",", ";", "\t", "|")
 _BINARY_NUL_SHARE = 0.1
 _TEXT_ENCODINGS = ("utf-8", "cp1252")
 _FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
+_ZIP_CREATE_SYSTEM = 3  # zip "made by" field: Unix, on every platform
 _FIXED_STAMP = b"2026-01-01T00:00:00Z"
 _CORE_TIMESTAMPS = re.compile(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*(</dcterms:)")
 
@@ -575,6 +576,7 @@ def write_xlsx_deterministic(frame: pd.DataFrame, path: Path, sheet_name: str = 
                 payload = _CORE_TIMESTAMPS.sub(rb"\g<1>" + _FIXED_STAMP + rb"\g<2>", payload)
             info = zipfile.ZipInfo(name, date_time=_FIXED_ZIP_TIME)
             info.compress_type = zipfile.ZIP_DEFLATED
+            info.create_system = _ZIP_CREATE_SYSTEM  # otherwise 0 on Windows, 3 elsewhere
             target.writestr(info, payload)
 
 

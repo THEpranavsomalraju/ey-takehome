@@ -120,6 +120,7 @@ def build(files: list[Path], target: Path, folder: str) -> None:
             info = zipfile.ZipInfo(f"{folder}/{relative.as_posix()}", date_time=FIXED_TIMESTAMP)
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
+            info.create_system = 3  # same bytes on every platform
             archive.writestr(info, (ROOT / relative).read_bytes())
 
 
