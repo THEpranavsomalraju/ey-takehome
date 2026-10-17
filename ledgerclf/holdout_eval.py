@@ -68,7 +68,14 @@ def _log_access(settings: Settings, token: HoldoutAccessToken) -> None:
     )
     previous = pd.read_csv(path, encoding="utf-8") if path.exists() else None
     table = entry if previous is None else pd.concat([previous, entry], ignore_index=True)
-    table.to_csv(path, index=False, encoding="utf-8", lineterminator="\n")
+    write_table(
+        settings,
+        ACCESS_LOG,
+        table,
+        "Holdout access log",
+        PRODUCER,
+        "Every holdout evaluation: time, code version, reason, and the model files scored.",
+    )
 
 
 def run_holdout_evaluation(

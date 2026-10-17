@@ -27,7 +27,7 @@ from ledgerclf.agent import (
     ungrounded_numbers,
 )
 from ledgerclf.agent_tools import ToolContext, ToolError, run_tool
-from ledgerclf.config import AgentParams, Paths, Settings
+from ledgerclf.config import HOLDOUT_EVALUATION_REPORT, AgentParams, Paths, Settings
 from ledgerclf.server import ResultCache, create_app
 from ledgerclf.service import PredictionService
 
@@ -374,13 +374,21 @@ def test_result_cache_evicts_oldest(holdout_result):
     assert cache.get(ids[2]) is holdout_result
 
 
-def test_labeled_holdout_file_is_predicted_without_reading_labels(service, settings):
+def test_labeled_holdout_file_follows_the_release_state(service, settings):
+    """Before the holdout evaluation its labels stay unread; after it, the dashboard
+    reproduces the official holdout accuracy exactly."""
     data = (settings.paths.holdout / "holdout_with_labels.xlsx").read_bytes()
     result = service.predict_file(data, "holdout_with_labels.xlsx")
     assert len(result.predictions) == 590
-    assert result.metrics is None
-    assert "true_label" not in result.predictions.columns
-    assert "HOLDOUT_METRICS_WITHHELD" in [i.code for i in result.report.issues]
+    report = settings.paths.reports / HOLDOUT_EVALUATION_REPORT
+    if not report.exists():
+        assert result.metrics is None
+        assert "true_label" not in result.predictions.columns
+        assert "HOLDOUT_METRICS_WITHHELD" in [i.code for i in result.report.issues]
+        return
+    official = json.loads(report.read_text(encoding="utf-8"))
+    assert result.metrics["labeled_rows"] == 590
+    assert result.metrics["accuracy"] == pytest.approx(official[result.model_used]["accuracy"])
 
 
 def test_holdout_flag_counts_use_exact_codes(settings, tmp_path):

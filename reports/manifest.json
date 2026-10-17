@@ -490,6 +490,102 @@
     },
     {
       "columns": [
+        "utc",
+        "git_commit",
+        "reason",
+        "champion_sha256",
+        "fallback_sha256"
+      ],
+      "description": "Every holdout evaluation: time, code version, reason, and the model files scored.",
+      "file": "holdout/access_log.csv",
+      "producer": "evaluate-holdout",
+      "title": "Holdout access log"
+    },
+    {
+      "columns": [
+        "flag",
+        "rows",
+        "accuracy"
+      ],
+      "description": "Champion accuracy on holdout rows carrying each flag.",
+      "file": "holdout/holdout_accuracy_by_flag.csv",
+      "producer": "evaluate-holdout",
+      "title": "Holdout accuracy by flag"
+    },
+    {
+      "columns": [
+        "class",
+        "precision",
+        "recall",
+        "f1",
+        "support"
+      ],
+      "description": "Champion on the holdout: precision, recall, F1, support per class.",
+      "file": "holdout/holdout_classification_report.csv",
+      "producer": "evaluate-holdout",
+      "title": "Holdout classification report"
+    },
+    {
+      "columns": [
+        "true_label",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6"
+      ],
+      "description": "Champion on the holdout: true class (rows) versus predicted class (columns).",
+      "file": "holdout/holdout_confusion_matrix.csv",
+      "producer": "evaluate-holdout",
+      "title": "Holdout confusion matrix"
+    },
+    {
+      "columns": [
+        "champion",
+        "cv_estimate_champion",
+        "cv_estimate_fallback",
+        "fallback_logistic",
+        "rows"
+      ],
+      "description": "Single evaluation of both models on the 590-row holdout, with the CV estimate beside each number.",
+      "file": "holdout/holdout_evaluation.json",
+      "producer": "evaluate-holdout",
+      "title": "Holdout evaluation"
+    },
+    {
+      "columns": [
+        "row_number",
+        "source_row",
+        "Col1",
+        "Col2",
+        "Col3",
+        "Col4",
+        "Col5",
+        "Col6",
+        "Col7",
+        "predicted_label",
+        "confidence",
+        "runner_up_label",
+        "runner_up_probability",
+        "p_Category_1",
+        "p_Category_2",
+        "p_Category_3",
+        "p_Category_4",
+        "p_Category_5",
+        "p_Category_6",
+        "review_required",
+        "flags",
+        "true_label",
+        "correct"
+      ],
+      "description": "Champion predictions on every holdout row with the true label.",
+      "file": "holdout/holdout_predictions.csv",
+      "producer": "evaluate-holdout",
+      "title": "Holdout predictions"
+    },
+    {
+      "columns": [
         "row_id",
         "column",
         "raw_value",

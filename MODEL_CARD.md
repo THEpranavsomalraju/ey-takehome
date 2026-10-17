@@ -51,9 +51,21 @@ Every CV uses `StratifiedGroupKFold` on the group key, with 5 folds and 3 seeds.
 - **Review threshold:** 0.8, chosen by rule D17 (`reports/selection/threshold_table.csv`). In out-of-fold data, 92.7% of rows fall above it with 97.9% accuracy, and the 7.3% below it have 63.4% accuracy.
 - **Flags:** each flag's severity comes from out-of-fold accuracy (D18). A critical flag sends the row to review: unseen vendor 0.896, unseen account 0.893, low confidence 0.634. Rows with no flag reach 0.982. Flags never withhold a prediction.
 
-## Holdout evaluation
+## Holdout evaluation (run once, 2026-10-17)
 
-Pending. It runs once, after the project owner approves, with `python -m ledgerclf evaluate-holdout --confirm`. Results go to `reports/holdout/` together with the CV estimate beside each number.
+The 590 holdout rows were scored once, with the models exactly as trained above (access log: `reports/holdout/access_log.csv`).
+
+| Measure | Champion | Fallback | CV estimate (champion) |
+|---|---|---|---|
+| Accuracy | **0.9712** | 0.9525 | 0.9539 +- 0.0068 |
+| Macro F1 (5 classes) | 0.7068 | 0.6880 | 0.7475 |
+| Expected calibration error | 0.011 | 0.023 | 0.0066 |
+| Rows sent to review | 8.8% | 8.8% | 7.3% |
+| Accuracy on rows not sent to review | 0.9888 | 0.9888 | 0.9791 |
+
+Per class (champion): Category_1 recall 0.990 (521 rows), Category_2 0.841 (63), Category_3 3 of 3, Category_6 1 of 1, Category_4 0 of 2 (both predicted Category_1). The holdout holds no Category_5 row.
+
+Reading the result: the holdout accuracy is about 2 standard errors above the CV estimate. Two effects explain most of it. First, the final model learned from all 5,309 training rows, while each CV model saw about 4,250. Second, the holdout has slightly fewer unfamiliar rows (2.0% new vendors versus 2.9% in CV, 5.8% new vendor-account pairs versus 7.1%). Training and holdout share no group and no identical row. The CV figure (about 95%) remains the honest expectation for new data. With 1 to 3 holdout rows per rare class, the holdout macro F1 is too noisy to compare closely with CV.
 
 ## Limitations
 

@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from ledgerclf.config import HOLDOUT_EVALUATION_REPORT
 from ledgerclf.schema import INPUT_COLUMNS
 from tests.conftest import csv_bytes, xlsx_bytes
 
@@ -81,9 +82,13 @@ def test_f13_raw_file_gives_5899_predictions_and_metric_keys(service, settings):
     # Structure only: the raw file contains holdout rows (DECISIONS.md D26, D35).
     assert {"accuracy", "macro_f1_5", "labeled_rows"} <= set(result.metrics)
     holdout = len(pd.read_csv(settings.paths.holdout / "holdout_features.csv", dtype=object))
-    assert result.metrics["labeled_rows"] == 5899 - holdout
     codes = {i.code for i in result.report.issues}
-    assert {"HOLDOUT_METRICS_WITHHELD", "TRAINING_ROWS_IN_UPLOAD"} <= codes
+    assert "TRAINING_ROWS_IN_UPLOAD" in codes
+    if (settings.paths.reports / HOLDOUT_EVALUATION_REPORT).exists():
+        assert result.metrics["labeled_rows"] == 5899
+    else:
+        assert result.metrics["labeled_rows"] == 5899 - holdout
+        assert "HOLDOUT_METRICS_WITHHELD" in codes
 
 
 def test_s04_shuffled_columns_give_identical_predictions(service, holdout_rows):
