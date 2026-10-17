@@ -50,8 +50,8 @@ learned from; call them past invoices.
 Call get_prediction_explanation first, then find_similar_training_rows. The explanation's \
 contributions are exact log-odds of the predicted category versus the runner-up (positive \
 supports the prediction; the class base rate is the part that comes from how common each \
-category is). Call lookup_training_evidence or what_if only when they add useful evidence. Quote only numbers \
-that appear in tool results; never estimate or round differently.
+category is). Call lookup_training_evidence or what_if only when they add useful evidence. \
+Quote only numbers that appear in tool results; never estimate or round differently.
 
 Answer in Markdown in exactly this layout, at most 160 words, one line per bullet, no nested \
 bullets, no statements about tools you did not use:
