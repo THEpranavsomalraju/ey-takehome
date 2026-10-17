@@ -2,15 +2,16 @@
 
 Living log. Updated after every gate run and every session. Format rules: docs/06 section 10.
 
-## Status summary (2026-10-17, afternoon)
+## Status summary (2026-10-17, end of backend work)
 
-- **Holdout evaluated once (approved):** champion 0.9712 accuracy (CV 0.9539), fallback 0.9525; review share 8.8%, auto rows 0.9888. Access log in reports/holdout/access_log.csv.
-- **Agent:** live with the owner's key (direct and relay); business-friendly three-part answers (Summary, Model facts, What to check); relay redeployed with the new prompt hash.
-- **GitHub:** private repo THEpranavsomalraju/ey-takehome. CI: macOS and Linux green on 3.11 to 3.14 and fallback job green; Windows fixed (LF writes, .gitattributes, CRLF-tolerant split hash), rerun pending; canary pandas 3 issue fixed.
-- **Grader-facing pass:** notebooks 01 to 03 rewritten (no internal references, terms defined, holdout section), README tour, MODEL_CARD with key design choices; code comment cleanup in progress.
-- **ZIP:** README, MODEL_CARD, notebooks, ledgerclf, frontend, data, artifacts, reports, tests, relay, 2 tools, requirements, pyproject, Dockerfile. No docs/, DECISIONS.md, dev notes, secrets.
-- **Left:** dashboard UI; then clean-room run and final ZIP.
-- **Commit rule (owner):** no Claude attribution in commit messages.
+- **Everything except the dashboard UI is done.**
+- Holdout evaluated once: champion 0.9712 (CV 0.9539), fallback 0.9525.
+- Agent live (relay and direct key), business-friendly three-part answers.
+- CI: 12 of 12 OS x Python cells and the fallback job green; canary green except the version-pinned split record (expected).
+- Clean room from the ZIP (folder name with spaces, comma, accents): every step PASS, including retraining to the shipped predictions and the no-LightGBM fallback.
+- Grader-facing pass complete: notebooks, README, model card, code comments, report texts.
+- Full gate PASS.
+- Left: dashboard UI (frontend/dist), then rebuild the ZIP and rerun the clean room.
 
 ## Current phase
 

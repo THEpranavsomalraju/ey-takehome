@@ -414,3 +414,25 @@ Context: docs/02 section 12 lists the modeling stack only. Part 2 needs an HTTP 
 Decision: add exact pins for fastapi, starlette, pydantic, uvicorn, python-multipart (the API), anthropic and httpx (the agent), and truststore (operating-system certificates behind corporate TLS proxies). Their two compiled transitive dependencies, pydantic-core and jiter, are pinned too, so every platform installs the same binary wheels. The modeling package imports none of these: the CLI, the pipeline and the offline explanations work without them, and `agent.py` imports `anthropic` only inside the client factory. Rejected: LangChain (adds dependencies without solving the key or network problem, see D32); Streamlit (no custom UI).
 
 Evidence: `python tools/check_wheels.py` covers 29 pins x Python 3.11 to 3.14 x Windows x64, macOS arm64, macOS x86_64 and Linux x86_64, with no gaps (2026-10-17).
+
+## D38. Explanations written for a business audience
+
+Status: Accepted (owner direction, 2026-10-17)
+
+Decision: every explanation (Claude and offline) has three parts: a plain-language **Summary**, the exact **Model facts** (probabilities, signed log-odds contributions, past-invoice counts, similar invoices), and **What to check**. Warnings appear in plain English, never as codes. Claude must not guess what anonymized tokens or document-flag codes mean. Grounding accepts a 0.1% relative rounding difference, so a correctly rounded figure is not rejected.
+
+Evidence: 9 live explanations through the relay and the direct key, all answered by Claude, none rejected by the grounding check; tests in tests/integration/test_agent_and_server.py.
+
+## D39. Holdout result and how it is reported
+
+Status: Accepted
+
+Result (single run, 2026-10-17, commit 176cfa7): champion accuracy 0.9712, macro F1 0.7068, ECE 0.011, review share 8.8%, auto accuracy 0.9888; fallback 0.9525. The holdout is 2 standard errors above CV (0.9539). Explanation: the final fit uses all 5,309 training rows against about 4,250 per fold, and the holdout has fewer unfamiliar rows (2.0% new vendors against 2.9%). No shared groups or fingerprints. The model card presents CV (about 95%) as the expectation for new data.
+
+## D40. Byte-identical files on every platform
+
+Status: Accepted (CI matrix findings)
+
+Decision: all text files are written with LF line endings; `.gitattributes` disables line-ending conversion; the split hash ignores CRLF; the holdout workbooks are stored uncompressed with a fixed zip creator field. Compressed bytes depend on the zlib build (Python 3.14 on Windows ships zlib-ng).
+
+Evidence: GitHub Actions: 12 of 12 OS and Python cells plus the fallback job green. The canary (unpinned latest libraries) passes 496 of 497; the remaining failure is the split record, which notes exact library versions by design.
