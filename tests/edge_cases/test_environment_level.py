@@ -150,7 +150,7 @@ def test_e07_cli_prints_under_cp1252_console(tmp_path, settings):
         env={"PYTHONIOENCODING": "cp1252"},
     )
     assert completed.returncode == 0, completed.stderr
-    assert completed.stdout.decode("cp1252").startswith("Predicted")
+    assert completed.stdout.decode("cp1252").startswith("**Summary:**")
 
 
 def test_e08_prediction_and_explanation_never_use_the_network(service, holdout_xlsx, monkeypatch):

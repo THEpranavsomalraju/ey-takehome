@@ -18,7 +18,7 @@ const ALLOWED_TOOLS = new Set([
   "what_if",
 ]);
 // sha256 of ledgerclf.agent.SYSTEM_PROMPT; tests/integration/test_agent_and_server.py keeps it in sync.
-const SYSTEM_PROMPT_SHA256 = "a3ec85719311bba48d2ea01546f53318c36c1d8aea20d5e90a358214b0191c1b";
+const SYSTEM_PROMPT_SHA256 = "b3f27101d827a60f8c5604222bf2780230e7e6a309e4b4fb7527bb8636ccac11";
 const ALLOWED_EFFORT = "low";
 const RATE_LIMIT_PER_MINUTE = 40;
 const recentRequests = new Map(); // per instance, best effort

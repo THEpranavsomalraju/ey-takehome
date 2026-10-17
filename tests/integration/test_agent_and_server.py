@@ -163,8 +163,8 @@ def test_bad_tool_arguments_return_errors_to_the_model(service, holdout_result):
 def test_offline_engine_uses_the_same_tools(service, holdout_result):
     answer = explain_with_agent(service, holdout_result, 5, use_llm=False)
     assert answer.engine == ENGINE_OFFLINE and answer.fallback_reason is None
-    assert answer.text.startswith("Predicted Category_")
-    assert "most similar training rows" in answer.text
+    assert answer.text.startswith("**Summary:** This invoice line most likely belongs to Category_")
+    assert "most similar past invoices" in answer.text and "**What to check:**" in answer.text
     assert [c["tool"] for c in answer.tool_calls] == [
         "get_prediction_explanation",
         "find_similar_training_rows",
@@ -420,3 +420,9 @@ def test_download_neutralizes_spreadsheet_formulas(api):
     text = api.get(f"/api/predict/{upload['upload_id']}/download").content.decode("utf-8-sig")
     assert "'=HYPERLINK" in text and "'@SUM(A1)" in text and "'+cmd" in text
     assert ",-617.60," in text
+
+
+def test_grounding_allows_a_small_relative_difference_only():
+    calls = [{"tool": "x", "input": {}, "output": {"contribution": 0.4894285}}]
+    assert ungrounded_numbers("It adds 0.489429.", calls, 1.0, 0.001) == []
+    assert ungrounded_numbers("It adds 0.4912.", calls, 1.0, 0.001) == ["0.4912"]

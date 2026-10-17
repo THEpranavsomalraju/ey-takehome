@@ -43,25 +43,39 @@ ROW_STRUCTURE_SUSPECT = "ROW_STRUCTURE_SUSPECT"
 # File-level issues whose rows may hold shifted or merged values.
 ROW_STRUCTURE_CODES = ("ROW_HAS_EXTRA_FIELDS", "UNBALANCED_QUOTE")
 FLAG_MESSAGES: dict[str, str] = {
-    "UNSEEN_VENDOR": "This vendor (Col1) never appeared in training.",
-    "UNSEEN_ACCOUNT": "This GL account (Col6) never appeared in training.",
-    "UNSEEN_VENDOR_ACCOUNT_PAIR": "This vendor and account never appeared together in training.",
-    "UNSEEN_DOC_TYPE": "This document flag (Col7) never appeared in training.",
-    "ALL_TOKENS_UNSEEN": "No word in the vendor, description, or account appeared in training.",
-    "TEXT_MISSING": "The vendor (Col1) or account (Col6) is missing.",
-    "AMOUNT_IMPUTED": "The amount (Col3) was missing or unreadable; the training median was used.",
-    "AMOUNT_OUT_OF_RANGE": "The amount (Col3) lies outside the range seen in training.",
+    "UNSEEN_VENDOR": "New vendor: this vendor (Col1) is not in the historical invoices.",
+    "UNSEEN_ACCOUNT": "New GL account: this account (Col6) is not in the historical invoices.",
+    "UNSEEN_VENDOR_ACCOUNT_PAIR": (
+        "New combination: this vendor and GL account were never used together before."
+    ),
+    "UNSEEN_DOC_TYPE": "New document flag: this Col7 value is not in the historical invoices.",
+    "ALL_TOKENS_UNSEEN": (
+        "Unfamiliar text: no word in the vendor, description, or account appears in the "
+        "historical invoices."
+    ),
+    "TEXT_MISSING": "Missing details: the vendor (Col1) or GL account (Col6) is blank.",
+    "AMOUNT_IMPUTED": (
+        "Missing amount: the amount (Col3) was blank or unreadable, so a typical amount "
+        "(the historical median) was used."
+    ),
+    "AMOUNT_OUT_OF_RANGE": "Unusual amount: the amount (Col3) is outside the historical range.",
     "DATE_IMPUTED": (
-        "The date (Col5) was missing or unreadable; the training median period was used."
+        "Missing date: the date (Col5) was blank or unreadable, so a typical month "
+        "(the historical median) was used."
     ),
     "DATE_OUT_OF_RANGE": (
-        "The posting period (Col5) lies outside the training range; it was clipped."
+        "Date outside history: the posting date (Col5) is outside the months the model "
+        "learned from, so the nearest known month was used."
     ),
-    "TEXT_TRUNCATED": "A text cell exceeded the length limit and was truncated.",
+    "TEXT_TRUNCATED": "Long text: a text value was over the length limit and was shortened.",
     ROW_STRUCTURE_SUSPECT: (
-        "This row had extra fields or an unclosed quote in the file; values may be shifted."
+        "Possible file problem: this line had extra fields or an unclosed quote, so values "
+        "may sit in the wrong columns."
     ),
-    LOW_CONFIDENCE: "The model's calibrated confidence is below the review threshold.",
+    LOW_CONFIDENCE: (
+        "Low confidence: the model's confidence is below the review threshold, so a person "
+        "should confirm the category."
+    ),
 }
 DEFAULT_SEVERITIES: dict[str, FlagSeverity] = {
     "UNSEEN_VENDOR": FlagSeverity.CRITICAL,

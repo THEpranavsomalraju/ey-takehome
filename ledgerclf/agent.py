@@ -27,6 +27,7 @@ from ledgerclf.agent_tools import (
 )
 from ledgerclf.config import AgentParams, Settings
 from ledgerclf.exceptions import LedgerClfError
+from ledgerclf.explain import render_fallback_text
 
 logger = logging.getLogger(__name__)
 
@@ -34,18 +35,39 @@ ENGINE_CLAUDE = "claude"
 ENGINE_OFFLINE = "offline"
 WORKSPACE_HEADER = "anthropic-workspace-id"
 RELAY_TOKEN_HEADER = "x-relay-token"
-SYSTEM_PROMPT = """You explain one prediction of an accounts payable ledger classifier to a tax \
-reviewer. The model assigns each invoice line to Category_1 to Category_6. Vendor, description, \
-and account values are anonymized tokens such as Word563, so never guess what a token means.
+SYSTEM_PROMPT = """You explain one prediction of an invoice classification model to a client's \
+finance team. Readers range from analysts to managers without data science training: give them a \
+plain explanation first, then the exact facts.
 
-Always call get_prediction_explanation first. Its contributions are exact: each input column's \
-contribution is in log-odds units toward the predicted class versus the runner-up (positive \
-supports the prediction). Call lookup_training_evidence, find_similar_training_rows, or what_if \
-when they help answer why. Use only numbers that appear in tool results; never estimate.
+The model reads one accounts payable invoice line and suggests one of six categories (Category_1 \
+to Category_6). Inputs: Col1 vendor, Col3 amount, Col4 line description, Col5 posting date, Col6 \
+GL account, Col7 document flag with values such as NoDoc and Doc1 (Col2, the invoice number, is \
+not used). Text values are anonymized tokens such as Word563, and the document flag values are \
+codes too, so never guess what any of them mean. About 88% of historical \
+invoices are Category_1. "Training rows" in tool results are the historical invoices the model \
+learned from; call them past invoices.
 
-Write at most 130 words of plain text, no headings, in this order: the prediction and its \
-confidence; the two or three inputs that drove it, with direction; the training evidence \
-behind them; risk flags and whether the row needs review."""
+Call get_prediction_explanation first, then find_similar_training_rows. The explanation's \
+contributions are exact log-odds of the predicted category versus the runner-up (positive \
+supports the prediction; the class base rate is the part that comes from how common each \
+category is). Call lookup_training_evidence or what_if only when they add useful evidence. Quote only numbers \
+that appear in tool results; never estimate or round differently.
+
+Answer in Markdown in exactly this layout, at most 160 words, one line per bullet, no nested \
+bullets, no statements about tools you did not use:
+**Summary:** Two or three sentences in everyday language, no jargon: the suggested category, how \
+sure the model is (in words and as a percentage), the main reason in terms of past invoices, and \
+whether a person should check it.
+
+**Model facts**
+- Prediction: category and probability, runner-up and probability.
+- Drivers: the two or three inputs with the largest contributions, each with its signed log-odds \
+value, plus the class base rate.
+- History: the past-invoice counts behind those drivers.
+- Similar invoices: how many of the most similar past invoices had the predicted category.
+
+**What to check:** Whether review is required and what exactly to verify. Describe warnings in \
+plain words, never as codes such as UNSEEN_VENDOR."""
 
 
 @dataclass
@@ -283,7 +305,9 @@ class ClaudeEngine:
     def _verified(self, text: str, calls: list[dict[str, Any]]) -> AgentAnswer:
         if not text:
             raise AgentFallbackError("Claude returned no text.")
-        unsupported = ungrounded_numbers(text, calls, self.params.percent_tolerance)
+        unsupported = ungrounded_numbers(
+            text, calls, self.params.percent_tolerance, self.params.relative_tolerance
+        )
         if unsupported:
             raise AgentFallbackError(
                 "Claude cited numbers not found in the tool results: "
@@ -320,14 +344,17 @@ def _tool_numbers(calls: list[dict[str, Any]]) -> list[float]:
 
 
 def ungrounded_numbers(
-    text: str, calls: list[dict[str, Any]], percent_tolerance: float
+    text: str,
+    calls: list[dict[str, Any]],
+    percent_tolerance: float,
+    relative_tolerance: float = 0.0,
 ) -> list[str]:
     """Return numbers cited in ``text`` that no tool result supports.
 
     Percentages may match a tool probability or share (0 to 1) within the
     tolerance in percentage points; other numbers must match a tool number
-    after rounding to the cited precision. Labels, column names, tokens,
-    and row numbers are ignored.
+    after rounding to the cited precision, or within ``relative_tolerance``
+    of it. Labels, column names, tokens, and row numbers are ignored.
     """
     known = _tool_numbers(calls)
     unsupported = []
@@ -343,7 +370,7 @@ def ungrounded_numbers(
                 for k in known
             )
         else:
-            tolerance = 0.5 * 10 ** (-decimals) + 1e-9
+            tolerance = max(0.5 * 10 ** (-decimals), relative_tolerance * abs(value)) + 1e-9
             ok = any(
                 abs(value - k) <= tolerance or abs(abs(value) - abs(k)) <= tolerance for k in known
             )
@@ -361,14 +388,15 @@ def offline_answer(context: ToolContext) -> AgentAnswer:
     calls: list[dict[str, Any]] = []
     explanation = run_tool(context, "get_prediction_explanation", {})
     calls.append({"tool": "get_prediction_explanation", "input": {}, "output": explanation})
-    lines = [context.payload["fallback_text"]]
+    extra: list[str] = []
     try:
         similar = run_tool(context, "find_similar_training_rows", {})
         calls.append({"tool": "find_similar_training_rows", "input": {}, "output": similar})
-        lines.append(_similar_sentence(similar, explanation["prediction"]["label"]))
+        extra.append(_similar_sentence(similar, explanation["prediction"]["label"]))
     except LedgerClfError as error:
         calls.append({"tool": "find_similar_training_rows", "input": {}, "error": error.message})
-    return AgentAnswer(" ".join(lines), ENGINE_OFFLINE, None, calls)
+    text = render_fallback_text(context.payload, extra)
+    return AgentAnswer(text, ENGINE_OFFLINE, None, calls)
 
 
 def _similar_sentence(similar: dict[str, Any], label: str) -> str:
@@ -376,6 +404,6 @@ def _similar_sentence(similar: dict[str, Any], label: str) -> str:
     matching = sum(r["label"] == label for r in rows)
     best = rows[0]["similarity"] if rows else 0.0
     return (
-        f"Of the {len(rows)} most similar training rows (best similarity {best:.2f}), "
-        f"{matching} were labeled {label}."
+        f"- Similar invoices: {matching} of the {len(rows)} most similar past invoices "
+        f"(best similarity {best:.2f}) were {label}."
     )

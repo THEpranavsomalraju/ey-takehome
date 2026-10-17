@@ -8,6 +8,7 @@ exactly to the model's logit margin, so the agent never estimates numbers.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,6 +49,12 @@ from ledgerclf.schema import (
 from ledgerclf.values import period_label
 
 SCHEMA_VERSION = "1.0"
+CONFIDENCE_WORDS: tuple[tuple[float, str], ...] = (
+    (0.95, "very confident"),
+    (0.8, "confident"),
+    (0.6, "only moderately confident"),
+    (0.0, "unsure"),
+)
 GROUP_LABELS = {
     GROUP_VENDOR: "vendor (Col1)",
     GROUP_PAIR: "vendor-account pair",
@@ -314,65 +321,113 @@ def _context(reference: ReferenceStats, row: Any) -> dict[str, Any]:
     }
 
 
-def _toward(contribution: float, payload: dict[str, Any]) -> str:
-    prediction = payload["prediction"]
-    winner = prediction["label"] if contribution >= 0 else prediction["runner_up"]["label"]
-    return f"toward {winner}"
-
-
-def render_fallback_text(payload: dict[str, Any]) -> str:
+def render_fallback_text(payload: dict[str, Any], extra_facts: Sequence[str] = ()) -> str:
     """Render the deterministic explanation used when no LLM is available.
+
+    The layout matches the Claude agent's answer: a plain-language summary,
+    the exact model facts, and what a reviewer should check.
 
     Args:
         payload: An explanation payload (``fallback_text`` not required).
+        extra_facts: Further Markdown bullet lines for the facts section.
 
     Returns:
-        Four short sentences: prediction, drivers, evidence, and flags.
+        Markdown text.
     """
     prediction = payload["prediction"]
     label, runner = prediction["label"], prediction["runner_up"]
     drivers = ", ".join(
-        f"{g['label']} ({_toward(g['contribution'], payload)})"
-        for g in payload["contributions"]["by_group"][:3]
+        f"{g['label']} {g['contribution']:+.2f}" for g in payload["contributions"]["by_group"][:3]
     )
-    lines = [
-        f"Predicted {label} with {prediction['probability']:.0%} confidence "
-        f"(runner-up {runner['label']}, {runner['probability']:.0%}).",
-        _base_rate_sentence(payload),
-        f"Strongest drivers: {drivers}.",
-        _evidence_sentence(payload),
-        _flag_sentence(payload),
+    facts = [
+        f"- Prediction: {label} at {prediction['probability']:.1%} (runner-up "
+        f"{runner['label']} at {runner['probability']:.1%}), calibrated probability.",
+        f"- Drivers (log-odds, {label} versus {runner['label']}; positive supports "
+        f"{label}): {drivers}; class base rate {payload['contributions']['bias']:+.2f}.",
+        *(f"- History: {line}." for line in _history_lines(payload)),
+        *extra_facts,
     ]
-    return " ".join(line for line in lines if line)
+    sections = [
+        f"**Summary:** {_summary(payload)}",
+        "",
+        "**Model facts**",
+        *facts,
+        "",
+        f"**What to check:** {_check_text(payload)}",
+    ]
+    return "\n".join(sections)
 
 
-def _base_rate_sentence(payload: dict[str, Any]) -> str:
-    """Say so when the class base rate, not the row's values, carries the prediction."""
-    contributions = payload["contributions"]
-    if contributions["bias"] <= contributions["total"]:
-        return ""
-    label = payload["prediction"]["label"]
-    prior = payload["context"]["class_prior"][label]
+def _summary(payload: dict[str, Any]) -> str:
+    prediction = payload["prediction"]
+    label, probability = prediction["label"], prediction["probability"]
+    review = (
+        "A person should check it before it is used."
+        if prediction["review_required"]
+        else "It can be used without manual review."
+    )
     return (
-        f"Most of the margin comes from the base rate: {prior:.0%} of training rows are {label}, "
-        "while the row's own values lean slightly the other way."
+        f"This invoice line most likely belongs to {label}. The model is "
+        f"{_confidence_words(probability)} ({probability:.0%}), {_main_reason(payload)} {review}"
     )
 
 
-def _evidence_sentence(payload: dict[str, Any]) -> str:
+def _confidence_words(probability: float) -> str:
+    for floor, words in CONFIDENCE_WORDS:
+        if probability >= floor:
+            return words
+    return CONFIDENCE_WORDS[-1][1]
+
+
+def _main_reason(payload: dict[str, Any]) -> str:
+    contributions = payload["contributions"]
     label = payload["prediction"]["label"]
-    ranking = {g["group"]: abs(g["contribution"]) for g in payload["contributions"]["by_group"]}
-    seen = [e for e in payload["evidence"][:3] if e["seen_in_training"]]
-    if not seen:
-        return "Evidence: this vendor, account, and pair never appeared in training."
-    best = max(seen, key=lambda e: ranking.get(e["group"], 0.0))
-    count = best["class_counts"].get(label, 0)
-    name = GROUP_LABELS[best["group"]]
-    total = best["training_rows"]
-    return f"Evidence: in training, {count} of {total} rows with this {name} were {label}."
+    if contributions["bias"] > contributions["total"]:
+        prior = payload["context"]["class_prior"][label]
+        runner = payload["prediction"]["runner_up"]["label"]
+        return (
+            f"mainly because most invoices ({prior:.0%}) belong to {label}; this line's own "
+            f"details lean toward {runner}."
+        )
+    supporting = [g for g in contributions["by_group"] if g["contribution"] > 0]
+    history = _best_history(payload, [g["group"] for g in supporting])
+    if history is not None:
+        return f"mainly because {history}."
+    if supporting:
+        return f"mainly because of its {supporting[0]['label']}."
+    return "although no single detail stands out."
 
 
-def _flag_sentence(payload: dict[str, Any]) -> str:
-    if not payload["flags"]:
-        return "No risk flags."
-    return "Flags: " + " ".join(f["message"] for f in payload["flags"])
+def _best_history(payload: dict[str, Any], groups: list[str]) -> str | None:
+    """Past-invoice evidence for the strongest supporting input that has any."""
+    label = payload["prediction"]["label"]
+    by_group = {e["group"]: e for e in payload["evidence"]}
+    for group in groups:
+        entry = by_group.get(group)
+        count = entry["class_counts"].get(label, 0) if entry else 0
+        if entry and count:
+            name, total = GROUP_LABELS[group], entry["training_rows"]
+            return f"{count} of {total} past invoices with the same {name} were {label}"
+    return None
+
+
+def _history_lines(payload: dict[str, Any]) -> list[str]:
+    label = payload["prediction"]["label"]
+    lines = []
+    for entry in payload["evidence"][:3]:
+        name = GROUP_LABELS[entry["group"]]
+        if not entry["seen_in_training"]:
+            lines.append(f"this {name} does not appear in the historical invoices")
+            continue
+        count, total = entry["class_counts"].get(label, 0), entry["training_rows"]
+        lines.append(f"{count} of {total} past invoices with this {name} were {label}")
+    return lines
+
+
+def _check_text(payload: dict[str, Any]) -> str:
+    messages = " ".join(f["message"] for f in payload["flags"])
+    if payload["prediction"]["review_required"]:
+        return "Review required. " + (messages or "Confirm the category against the invoice.")
+    if messages:
+        return "No review required, but note: " + messages
+    return "No review required: every input is familiar and the model is confident."

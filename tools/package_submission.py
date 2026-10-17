@@ -21,33 +21,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SUFFIX = "_AI Technical Assessment"
 FIXED_TIMESTAMP = (2026, 10, 18, 0, 0, 0)
+# Only what a grader needs to install, run, read, and verify the project.
 INCLUDE_FILES = (
     "README.md",
     "MODEL_CARD.md",
-    "DECISIONS.md",
     "pyproject.toml",
     "requirements.txt",
     "requirements-dev.txt",
-    "requirements-research.txt",
     "Dockerfile",
     ".dockerignore",
-    ".gitignore",
+    "tools/compare_golden.py",
+    "tools/run_notebooks.py",
 )
 INCLUDE_DIRS = (
-    ".github",
     "artifacts",
     "data",
-    "docs",
     "frontend",
     "ledgerclf",
     "notebooks",
     "relay",
     "reports",
-    "research",
     "tests",
-    "tools",
 )
-DEV_NOTES = ("CLAUDE.md", "PROGRESS.md", ".claude")
+DEV_NOTES = ("CLAUDE.md", "PROGRESS.md", ".claude", "DECISIONS.md", "docs")
 EXCLUDE_PATTERNS = (
     "__pycache__",
     "*.pyc",

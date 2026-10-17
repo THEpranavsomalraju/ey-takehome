@@ -286,6 +286,7 @@ class AgentParams:
     relay_url: str = "https://ledgerclf-agent-relay.vercel.app/api"
     relay_token: str = "69ffdcce74916b566ca3c2004eeab862"
     percent_tolerance: float = 1.0
+    relative_tolerance: float = 0.001  # a cited number may differ from its source by 0.1%
 
 
 @dataclass(frozen=True)

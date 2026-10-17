@@ -64,7 +64,7 @@ def test_x04_fallback_text_is_present_and_deterministic(service, holdout_result)
     first = service.explain(holdout_result, 7)["fallback_text"]
     second = service.explain(holdout_result, 7)["fallback_text"]
     assert first == second
-    assert first.startswith("Predicted Category_")
+    assert first.startswith("**Summary:**") and "**Model facts**" in first
     assert first.isascii()
 
 
