@@ -1,0 +1,68 @@
+{
+  "class_counts": {
+    "holdout": {
+      "Category_1": 521,
+      "Category_2": 63,
+      "Category_3": 3,
+      "Category_4": 2,
+      "Category_5": 0,
+      "Category_6": 1
+    },
+    "total": {
+      "Category_1": 5215,
+      "Category_2": 631,
+      "Category_3": 23,
+      "Category_4": 16,
+      "Category_5": 2,
+      "Category_6": 12
+    },
+    "train": {
+      "Category_1": 4694,
+      "Category_2": 568,
+      "Category_3": 20,
+      "Category_4": 14,
+      "Category_5": 2,
+      "Category_6": 11
+    }
+  },
+  "groups": {
+    "holdout": 435,
+    "total": 4380,
+    "train": 3945
+  },
+  "holdout_row_ids_sha256": "a524a97f751dadf3cd9518eebcd23fbd087c42293511e32a014f947e6dc31b6f",
+  "period_range": [
+    "2016-10",
+    "2018-12"
+  ],
+  "raw_data_sha256": "36882b3d9a40c791864a98a8a964b4ad1ceee343f20cb251562911725d1b09cc",
+  "rows": {
+    "holdout": 590,
+    "total": 5899,
+    "train": 5309
+  },
+  "rule": {
+    "excluded_classes": [
+      "Category_5"
+    ],
+    "fold_used": "first",
+    "required_classes": [
+      "Category_3",
+      "Category_4",
+      "Category_6"
+    ],
+    "rows": [
+      580,
+      600
+    ],
+    "share_classes": [
+      "Category_1",
+      "Category_2"
+    ],
+    "share_tolerance": 0.01,
+    "splitter": "StratifiedGroupKFold(n_splits=10, shuffle=True)"
+  },
+  "seed": 0,
+  "seeds_tried": 1,
+  "sklearn_version": "1.9.0"
+}

@@ -17,11 +17,11 @@ import numpy as np
 import pandas as pd
 
 MISSING_MARKERS = frozenset({"", "nan", "none", "null", "n/a", "na", "#n/a", "-", "nat"})
-_INVISIBLE = dict.fromkeys(map(ord, "​‌‍⁠﻿"), None)
+_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _WHITESPACE = re.compile(r"\s+")
 
-_CURRENCY = re.compile(r"^(?:usd|eur|gbp|\$|€|£)\s*|\s*(?:usd|eur|gbp|\$|€|£)$")
+_CURRENCY = re.compile(r"^(?:usd|eur|gbp|\$|\u20ac|\u00a3)\s*|\s*(?:usd|eur|gbp|\$|\u20ac|\u00a3)$")
 _PLAIN_NUMBER = re.compile(r"^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$", re.ASCII)
 _EUROPEAN = re.compile(r"^[-+]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$", re.ASCII)
 _GROUPED = re.compile(r"^[-+]?\d{1,3}(?P<sep>[,' ])\d{3}(?:(?P=sep)\d{3})*(?:\.\d+)?$", re.ASCII)
@@ -93,7 +93,11 @@ def clean_text(value: object, max_chars: int) -> tuple[str | None, bool]:
 def _to_text(value: object) -> str:
     if isinstance(value, bool | np.bool_):
         return "True" if value else "False"
-    if isinstance(value, float | np.floating) and math.isfinite(value) and float(value).is_integer():
+    if (
+        isinstance(value, float | np.floating)
+        and math.isfinite(value)
+        and float(value).is_integer()
+    ):
         return str(int(value))
     if isinstance(value, pd.Timestamp | dt.datetime):
         return value.isoformat(sep=" ")
@@ -124,7 +128,7 @@ def parse_amount(value: object) -> float | None:
 
 
 def _parse_amount_text(text: str) -> float | None:
-    text = text.strip().replace("−", "-").lower()
+    text = text.strip().replace("\u2212", "-").lower()
     negative = False
     if text.startswith("(") and text.endswith(")"):
         negative, text = True, text[1:-1].strip()

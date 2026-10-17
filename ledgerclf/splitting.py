@@ -11,12 +11,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import re
 import warnings
 import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -41,7 +43,7 @@ from ledgerclf.schema import (
     coerce_values,
     resolve_columns,
 )
-from ledgerclf.values import period_label
+from ledgerclf.values import is_missing, period_label
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,8 @@ HOLDOUT_FEATURES_STEM = "holdout_features"
 HOLDOUT_LABELS_FILE = "holdout_labels.csv"
 HOLDOUT_WITH_LABELS_FILE = "holdout_with_labels.xlsx"
 _GROUP_KEY_SEPARATOR = "\x1f"
+_FIXED_STAMP = b"2026-01-01T00:00:00Z"
+_FIXED_W3CDTF = re.compile(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*(</dcterms:)")
 
 
 @contextmanager
@@ -87,7 +91,7 @@ def build_group_key(frame: pd.DataFrame) -> np.ndarray:
         frame[COL_ACCOUNT].fillna(MISSING_TOKEN).astype(str),
         frame[COL_DOC_TYPE].fillna(MISSING_TOKEN).astype(str),
     ]
-    keys = parts[0].str.cat(parts[1:], sep=_GROUP_KEY_SEPARATOR)
+    keys = pd.concat(parts, axis=1).agg(_GROUP_KEY_SEPARATOR.join, axis=1)
     codes, _ = pd.factorize(keys, sort=False)
     return codes.astype(np.int64)
 
@@ -144,7 +148,8 @@ def _rule_accepts(y: np.ndarray, holdout_idx: np.ndarray, rule: HoldoutRule) -> 
     if any((held == c).sum() > 0 for c in rule.excluded_classes):
         return False
     return all(
-        abs((held == c).mean() - (y == c).mean()) <= rule.share_tolerance for c in rule.share_classes
+        abs((held == c).mean() - (y == c).mean()) <= rule.share_tolerance
+        for c in rule.share_classes
     )
 
 
@@ -172,7 +177,8 @@ def select_holdout_seed(y: np.ndarray, groups: np.ndarray, rule: HoldoutRule) ->
         if _rule_accepts(y, holdout_idx, rule):
             return HoldoutSelection(seed, np.sort(train_idx), np.sort(holdout_idx), seed + 1)
     raise ConfigError(
-        f"No seed below {rule.max_seed} satisfies the holdout rule. Review HoldoutRule in config.py.",
+        f"No seed below {rule.max_seed} satisfies the holdout rule. "
+        "Review HoldoutRule in config.py.",
         code="HOLDOUT_RULE_UNSATISFIED",
     )
 
@@ -183,7 +189,7 @@ class SplitResult:
 
     train_ids: np.ndarray
     holdout_ids: np.ndarray
-    manifest: dict[str, object] = field(default_factory=dict)
+    manifest: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -256,37 +262,48 @@ def _write_holdout_files(settings: Settings, holdout_ids: np.ndarray) -> None:
     holdout_dir = settings.paths.holdout
     _write_xlsx(features, holdout_dir / f"{HOLDOUT_FEATURES_STEM}.xlsx")
     features.to_csv(
-        holdout_dir / f"{HOLDOUT_FEATURES_STEM}.csv", index=False, encoding="utf-8", lineterminator="\n"
+        holdout_dir / f"{HOLDOUT_FEATURES_STEM}.csv",
+        index=False,
+        encoding="utf-8",
+        lineterminator="\n",
     )
     labels = pd.DataFrame(
         {"row_number": np.arange(1, len(held) + 1), LABEL_COLUMN: held[LABEL_COLUMN]}
     )
-    labels.to_csv(holdout_dir / HOLDOUT_LABELS_FILE, index=False, encoding="utf-8", lineterminator="\n")
-    _write_xlsx(features.assign(**{LABEL_COLUMN: held[LABEL_COLUMN]}), holdout_dir / HOLDOUT_WITH_LABELS_FILE)
+    labels.to_csv(
+        holdout_dir / HOLDOUT_LABELS_FILE, index=False, encoding="utf-8", lineterminator="\n"
+    )
+    _write_xlsx(
+        features.assign(**{LABEL_COLUMN: held[LABEL_COLUMN]}),
+        holdout_dir / HOLDOUT_WITH_LABELS_FILE,
+    )
 
 
 def _invoice_text(value: object) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
-    return "" if pd.isna(value) else str(value)
+    return "" if is_missing(value) else str(value)
 
 
 def _write_xlsx(frame: pd.DataFrame, path: Path) -> None:
-    """Write an xlsx with a fixed creation timestamp so reruns are byte-identical."""
+    """Write an xlsx, then pin its timestamps so reruns are byte-identical."""
     with pd.ExcelWriter(path, engine="openpyxl") as writer:
         frame.to_excel(writer, index=False, sheet_name="data")
-        properties = writer.book.properties
-        fixed = pd.Timestamp("2026-01-01").to_pydatetime()
-        properties.created = fixed
-        properties.modified = fixed
-    _normalize_zip_timestamps(path)
+    _pin_xlsx_timestamps(path)
 
 
-def _normalize_zip_timestamps(path: Path) -> None:
+def _pin_xlsx_timestamps(path: Path) -> None:
+    """Replace document-property and zip-entry timestamps with a fixed value.
+
+    openpyxl stamps the save time into ``docProps/core.xml`` and every zip
+    entry, which would make each ``split`` run produce different bytes.
+    """
     with zipfile.ZipFile(path) as source:
         entries = [(info.filename, source.read(info.filename)) for info in source.infolist()]
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as target:
         for name, payload in entries:
+            if name == "docProps/core.xml":
+                payload = _FIXED_W3CDTF.sub(rb"\g<1>" + _FIXED_STAMP + rb"\g<2>", payload)
             info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             target.writestr(info, payload)
@@ -298,7 +315,7 @@ def _class_counts(y: np.ndarray) -> dict[str, int]:
 
 def _build_manifest(
     settings: Settings, data: LabeledFrame, selection: HoldoutSelection, ids_path: Path
-) -> dict[str, object]:
+) -> dict[str, Any]:
     rule = settings.holdout_rule
     periods = data.frame[PERIOD].dropna().astype(int)
     return {
@@ -313,16 +330,20 @@ def _build_manifest(
             "share_classes": list(rule.share_classes),
             "share_tolerance": rule.share_tolerance,
         },
-        "rows": {"total": len(data.y), "train": len(selection.train_idx), "holdout": len(selection.holdout_idx)},
+        "rows": {
+            "total": len(data.y),
+            "train": len(selection.train_idx),
+            "holdout": len(selection.holdout_idx),
+        },
         "class_counts": {
             "total": _class_counts(data.y),
             "train": _class_counts(data.y[selection.train_idx]),
             "holdout": _class_counts(data.y[selection.holdout_idx]),
         },
         "groups": {
-            "total": int(len(np.unique(data.groups))),
-            "train": int(len(np.unique(data.groups[selection.train_idx]))),
-            "holdout": int(len(np.unique(data.groups[selection.holdout_idx]))),
+            "total": len(np.unique(data.groups)),
+            "train": len(np.unique(data.groups[selection.train_idx])),
+            "holdout": len(np.unique(data.groups[selection.holdout_idx])),
         },
         "period_range": [period_label(int(periods.min())), period_label(int(periods.max()))],
         "raw_data_sha256": sha256_file(settings.paths.raw_data),
@@ -340,7 +361,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _write_json(path: Path, payload: dict[str, object]) -> None:
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

@@ -49,7 +49,13 @@ INPUT_COLUMNS: tuple[str, ...] = (
 MODEL_INPUT_COLUMNS: tuple[str, ...] = tuple(c for c in INPUT_COLUMNS if c != COL_INVOICE)
 REQUIRED_COLUMNS: tuple[str, ...] = MODEL_INPUT_COLUMNS
 OPTIONAL_COLUMNS: tuple[str, ...] = (COL_INVOICE,)
-TEXT_COLUMNS: tuple[str, ...] = (COL_VENDOR, COL_INVOICE, COL_DESCRIPTION, COL_ACCOUNT, COL_DOC_TYPE)
+TEXT_COLUMNS: tuple[str, ...] = (
+    COL_VENDOR,
+    COL_INVOICE,
+    COL_DESCRIPTION,
+    COL_ACCOUNT,
+    COL_DOC_TYPE,
+)
 TOKEN_COLUMNS: tuple[str, ...] = (COL_VENDOR, COL_DESCRIPTION, COL_ACCOUNT)
 LABEL_COLUMN = "ClassificationLabel"
 MISSING_TOKEN = "__missing__"
@@ -70,7 +76,7 @@ _HEADER_ALIASES: dict[str, str] = {
     **{alias: LABEL_COLUMN for alias in ("classificationlabel", "label", "class", "target", "h")},
 }
 _HEADER_STRIP = re.compile(r"[\s_\-.]+")
-_INDEX_ARTIFACT = re.compile(r"^(unnamed\d*|index|)$")
+_INDEX_ARTIFACT = re.compile(r"^(unnamed:?\d*|index|)$")
 
 
 class Severity(StrEnum):
@@ -291,7 +297,9 @@ def _is_index_artifact(label: str, values: pd.Series) -> bool:
 
 
 def _assemble(body: pd.DataFrame, chosen: dict[str, int], first_source_row: int) -> pd.DataFrame:
-    data = {name: body.iloc[:, position].to_numpy(dtype=object) for name, position in chosen.items()}
+    data = {
+        name: body.iloc[:, position].to_numpy(dtype=object) for name, position in chosen.items()
+    }
     frame = pd.DataFrame(data, dtype=object)
     frame.insert(0, SOURCE_ROW, np.arange(first_source_row, first_source_row + len(body)))
     return frame
@@ -358,7 +366,9 @@ def coerce_values(
     out[AMOUNT] = _coerce_amounts(frame[COL_AMOUNT])
     out[PERIOD], out[COL_PERIOD], date_issues = _coerce_periods(frame[COL_PERIOD])
     if LABEL_COLUMN in frame.columns:
-        out[LABEL_COLUMN] = pd.Series([clean_text(v, 200)[0] for v in frame[LABEL_COLUMN]], dtype=object)
+        out[LABEL_COLUMN] = pd.Series(
+            [clean_text(v, 200)[0] for v in frame[LABEL_COLUMN]], dtype=object
+        )
     out[COL_AMOUNT] = _amount_display(frame[COL_AMOUNT], out[AMOUNT])
     out[TEXT_TRUNCATED] = truncated
     out, empty_rows = _drop_empty_rows(out, frame)
@@ -380,7 +390,7 @@ def _coerce_amounts(values: pd.Series) -> pd.Series:
 
 
 def _amount_display(raw: pd.Series, parsed: pd.Series) -> pd.Series:
-    display = []
+    display: list[str | None] = []
     for raw_value, number in zip(raw.tolist(), parsed.tolist(), strict=True):
         if not np.isnan(number):
             display.append(f"{number:.2f}")
@@ -396,7 +406,8 @@ def _coerce_periods(values: pd.Series) -> tuple[pd.Series, pd.Series, list[Valid
     parsed = [parse_date(v, day_first=day_first) for v in raw]
     periods = pd.Series([np.nan if p is None else float(p.period_index) for p in parsed])
     display = [
-        p.label if p is not None else clean_text(v, 100)[0] for p, v in zip(parsed, raw, strict=True)
+        p.label if p is not None else clean_text(v, 100)[0]
+        for p, v in zip(parsed, raw, strict=True)
     ]
     issues = []
     if not day_first and any(is_ambiguous_numeric_date(v) for v in raw):

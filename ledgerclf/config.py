@@ -76,7 +76,7 @@ class FeatureParams:
 class LinearParams:
     """Multinomial logistic regression parameters."""
 
-    C: float = 10.0  # noqa: N815 - sklearn parameter name
+    C: float = 10.0
     max_iter: int = 5_000
     solver: str = "lbfgs"
     class_weight_power: float = 0.0

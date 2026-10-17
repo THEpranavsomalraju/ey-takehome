@@ -14,6 +14,7 @@ import warnings
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
@@ -200,7 +201,7 @@ def _mismatch(extension: str, detected: str, file_name: str) -> list[ValidationI
 def _read_excel(
     data: bytes, detected: str, file_name: str, limits: Limits
 ) -> tuple[pd.DataFrame, str, list[ValidationIssue]]:
-    engine = "xlrd" if detected == "xls" else "openpyxl"
+    engine: Literal["xlrd", "openpyxl"] = "xlrd" if detected == "xls" else "openpyxl"
     sheets = _parse_sheets(data, engine, file_name)
     issues: list[ValidationIssue] = []
     chosen = _choose_sheet(sheets, limits)
@@ -215,7 +216,9 @@ def _read_excel(
     return sheets[chosen], chosen, issues
 
 
-def _parse_sheets(data: bytes, engine: str, file_name: str) -> dict[str, pd.DataFrame]:
+def _parse_sheets(
+    data: bytes, engine: Literal["xlrd", "openpyxl"], file_name: str
+) -> dict[str, pd.DataFrame]:
     unreadable = FileReadError(
         f"The file '{file_name}' could not be opened as an Excel workbook. It may be damaged "
         "or incomplete. Open it in Excel, save it again, and upload the new copy.",
@@ -263,9 +266,7 @@ def _header_has_required(cells: list[object]) -> bool:
     return all(column in names for column in REQUIRED_COLUMNS)
 
 
-def _read_csv(
-    data: bytes, limits: Limits
-) -> tuple[pd.DataFrame, str, str, list[ValidationIssue]]:
+def _read_csv(data: bytes, limits: Limits) -> tuple[pd.DataFrame, str, str, list[ValidationIssue]]:
     text, encoding, issues = _decode(data)
     if "\x00" in text:
         text = text.replace("\x00", "")
