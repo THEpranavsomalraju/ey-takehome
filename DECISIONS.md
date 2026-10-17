@@ -163,6 +163,8 @@ Result (reports/selection/champion_decision.json, tuned parameters from reports/
 
 Trail: best macro_f1_5 0.7475 and best out-of-time 0.9480. logistic_p0 (macro_f1_5 0.6887) and logodds_blend_p0 (0.7159, below the 0.7175 floor) are excluded by the macro F1 guardrail. Of the eligible candidates, logodds_blend_p0.25 leads logistic_p0.25 on CV accuracy by 0.0028 (above the 0.002 tie margin): chosen. Fallback: logistic_p0, the most accurate logistic candidate. Champion configuration: logistic C=3 with unigrams and bigrams, LightGBM 800 trees (learning rate 0.1, 31 leaves, min_child_samples 1, reg_lambda 1, colsample 0.8, subsample 0.7), linear weight 0.7, class weight power 0.25 for both members. Nested CV of the tuning procedure: outer accuracy 0.9548 +- 0.0050 versus 0.9540 non-nested (gap -0.0008).
 
+Metric aggregation (recorded after the leakage audit, cycle 2; unchanged since c1c54e3, before selection ran): accuracy is the mean over 15 folds. Macro F1 and per-class recall are computed on each seed's pooled out-of-fold predictions and then averaged over the 3 seeds, because the rare classes have 0 to 4 rows in a single fold, so fold-level F1 would be mostly undefined. Tuning trials report fold means, which serve only for ranking inside one search. logodds_blend_p0 missed the floor by 0.0016 under this aggregation. The rule was applied as pre-registered and was not revisited after seeing that margin.
+
 ## D12. LightGBM minimum leaf size of 2
 
 Status: Accepted (confirm in Phase 5 tuning)
@@ -387,8 +389,28 @@ Status: Accepted (edge-case review, round 2; extends D26)
 
 Context: the service withheld metrics only when an upload was byte-identical to `holdout_with_labels.xlsx`. A CSV re-save, a copy pasted into another workbook, or the raw `Challenge_Data.xls` scored holdout labels in the dashboard, which CLAUDE.md rule 1 forbids before `evaluate-holdout`. The raw file also showed in-sample accuracy for training rows with no caveat.
 
-Decision: `ledgerclf/overlap.py` fingerprints rows in model form (normalized text of the five text columns, amount in cents, period index). Before any label is scored, the service matches the upload against the fingerprints of the unreleased holdout rows (read from the labeled holdout file with its label column dropped unread) and of the training rows. Matching holdout rows are predicted, but their labels are blanked before scoring (INFO `HOLDOUT_METRICS_WITHHELD`); matching training rows are scored with WARNING `TRAINING_ROWS_IN_UPLOAD`. Both checks run only for uploads that carry a label column. After the holdout evaluation, only the training check remains.
+Decision: `ledgerclf/overlap.py` fingerprints rows in model form (normalized text of the five text columns, amount in cents, period index). Before any label is scored, the service matches the upload against the fingerprints of the unreleased holdout rows (read from the label-free `holdout_features.xlsx`; the labeled file is never opened) and of the training rows. If the features file is missing while the holdout is unreleased, the guard fails closed: every label in the upload stays unread (code review, cycle 2). Matching holdout rows are predicted, but their labels are blanked before scoring (INFO `HOLDOUT_METRICS_WITHHELD`); matching training rows are scored with WARNING `TRAINING_ROWS_IN_UPLOAD`. Both checks run only for uploads that carry a label column. After the holdout evaluation, only the training check remains.
 
 Consequences: label-handling edge tests attach synthetic labels to holdout feature rows with a new Col2, so the rows match neither set (`unseen_rows` fixture). F13 now asserts the stricter count: the raw file scores 5,309 training rows and withholds 590.
 
 Evidence: tests/adversarial/test_holdout_guard.py, tests/adversarial/test_report_messages.py, tests/edge_cases/test_prediction_level.py::test_f13...; 531 distinct holdout fingerprints, 4,688 training fingerprints, overlap 0.
+
+## D36. Feature set kept after the ablation
+
+Status: Accepted
+
+Context: the ablation on `logistic_p0` (`reports/benchmark/ablation.csv`) shows that dropping the Col6 whole-value one-hot raises macro F1 by 0.021 and accuracy by 0.0012. The gain comes from about one more Category_6 row per seed (recall 0.212 to 0.303, 11 rows in total).
+
+Decision: keep the specified feature set (docs/04 section 3). A check of the champion configuration (log-odds blend p0.25, the same 3 seeds x 5 grouped folds, training portion only) points the other way: without `col6_value`, accuracy falls from 0.9539 to 0.9532 and macro F1 from 0.7475 to 0.7326. The full run reproduced the recorded champion scores exactly.
+
+Evidence: the logistic baseline result is in ablation.csv. The champion check is a one-off script run during the Phase 8 notebook review; its result is recorded here and in notebooks/03_modeling.ipynb section 3.
+
+## D37. Runtime dependencies for the API and the agent
+
+Status: Accepted (project owner approval, 2026-10-17, when the custom dashboard and the Claude agent were agreed)
+
+Context: docs/02 section 12 lists the modeling stack only. Part 2 needs an HTTP server for the dashboard and a Claude client for the agent. CLAUDE.md section 8 requires the owner's approval before adding a dependency.
+
+Decision: add exact pins for fastapi, starlette, pydantic, uvicorn, python-multipart (the API), anthropic and httpx (the agent), and truststore (operating-system certificates behind corporate TLS proxies). Their two compiled transitive dependencies, pydantic-core and jiter, are pinned too, so every platform installs the same binary wheels. The modeling package imports none of these: the CLI, the pipeline and the offline explanations work without them, and `agent.py` imports `anthropic` only inside the client factory. Rejected: LangChain (adds dependencies without solving the key or network problem, see D32); Streamlit (no custom UI).
+
+Evidence: `python tools/check_wheels.py` covers 29 pins x Python 3.11 to 3.14 x Windows x64, macOS arm64, macOS x86_64 and Linux x86_64, with no gaps (2026-10-17).

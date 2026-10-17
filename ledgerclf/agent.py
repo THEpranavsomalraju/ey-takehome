@@ -9,6 +9,7 @@ which calls the same tools in a fixed order (DECISIONS.md D25).
 
 from __future__ import annotations
 
+import functools
 import logging
 import os
 import re
@@ -118,13 +119,19 @@ def resolve_connection(
     return None
 
 
-def _client(connection: ClaudeConnection, params: AgentParams) -> Any:
+@functools.cache
+def _use_system_certificates() -> None:
+    """Trust the operating system's certificate store once (corporate TLS proxies)."""
     try:
         import truststore
 
-        truststore.inject_into_ssl()  # use the operating system's certificates (corporate proxies)
+        truststore.inject_into_ssl()
     except ImportError:
         logger.debug("truststore not installed; using bundled certificates")
+
+
+def _client(connection: ClaudeConnection, params: AgentParams) -> Any:
+    _use_system_certificates()
     import anthropic
 
     return anthropic.Anthropic(
@@ -159,27 +166,44 @@ def explain_with_agent(
     """
     started = time.perf_counter()
     context = ToolContext(service, result, row_number)
-    reason: str | None
     params = service.settings.agent
-    connection = (
-        resolve_connection(service.settings, override_key) if use_llm and client is None else None
-    )
-    if use_llm and (client is not None or connection is not None):
-        try:
-            answer = ClaudeEngine(client or _client(connection, params), params).run(context)  # type: ignore[arg-type]
-            answer.seconds = time.perf_counter() - started
-            return answer
-        except AgentFallbackError as failure:
-            reason = failure.message
-        except Exception as error:  # boundary: any client or network failure falls back
-            logger.debug("Claude engine failed", exc_info=True)
-            reason = f"Claude was unreachable ({type(error).__name__})."
-    else:
-        reason = None if not use_llm else "No API key or relay configured."
-    answer = offline_answer(context)
-    answer.fallback_reason = reason
+    answer: AgentAnswer | None = None
+    reason: str | None = None
+    if use_llm:
+        if client is None:
+            connection = resolve_connection(service.settings, override_key)
+            client = _client(connection, params) if connection is not None else None
+        if client is None:
+            reason = "No API key or relay configured."
+        else:
+            answer, reason = _claude_answer(client, params, context)
+    if answer is None:
+        answer = offline_answer(context)
+        answer.fallback_reason = reason
     answer.seconds = time.perf_counter() - started
     return answer
+
+
+def _claude_answer(
+    client: Any, params: AgentParams, context: ToolContext
+) -> tuple[AgentAnswer | None, str | None]:
+    """Return Claude's verified answer, or None with the reason it could not be used."""
+    try:
+        return ClaudeEngine(client, params).run(context), None
+    except AgentFallbackError as failure:
+        return None, failure.message
+    except Exception as error:  # boundary: any client or network failure falls back
+        logger.debug("Claude engine failed", exc_info=True)
+        return None, _failure_reason(error)
+
+
+def _failure_reason(error: Exception) -> str:
+    """Name network and API errors as unreachable; anything else as an engine failure."""
+    name = type(error).__name__
+    from_client = type(error).__module__.split(".")[0] in ("anthropic", "httpx")
+    if from_client or isinstance(error, OSError | TimeoutError):
+        return f"Claude was unreachable ({name})."
+    return f"The Claude engine failed ({name})."
 
 
 class AgentFallbackError(LedgerClfError):
@@ -204,7 +228,10 @@ class ClaudeEngine:
         request = f"Explain why row {context.row_number} received its prediction."
         messages: list[dict[str, Any]] = [{"role": "user", "content": request}]
         calls: list[dict[str, Any]] = []
+        deadline = time.perf_counter() + self.params.deadline_seconds
         for _ in range(self.params.max_turns):
+            if time.perf_counter() > deadline:
+                raise AgentFallbackError("Claude took longer than the time limit.")
             response = self.client.messages.create(
                 model=self.params.model,
                 max_tokens=self.params.max_tokens,
@@ -229,8 +256,10 @@ class ClaudeEngine:
 
     @staticmethod
     def _execute(context: ToolContext, use: Any, calls: list[dict[str, Any]]) -> dict[str, Any]:
-        arguments = dict(use.input or {})
+        arguments = use.input if isinstance(use.input, dict) else {}
         try:
+            if not isinstance(use.input, dict):
+                raise ToolError("Tool input must be a JSON object.")
             output = run_tool(context, use.name, arguments)
             calls.append({"tool": use.name, "input": arguments, "output": output})
             return {
@@ -239,13 +268,17 @@ class ClaudeEngine:
                 "content": tool_result_text(output),
             }
         except (ToolError, LedgerClfError) as error:
-            calls.append({"tool": use.name, "input": arguments, "error": error.message})
-            return {
-                "type": "tool_result",
-                "tool_use_id": use.id,
-                "content": f"Error: {error.message}",
-                "is_error": True,
-            }
+            message = error.message
+        except Exception:  # boundary: a local tool defect must not end the conversation
+            logger.debug("Tool %s failed", use.name, exc_info=True)
+            message = "The tool failed on this input. Answer from the other tool results."
+        calls.append({"tool": use.name, "input": arguments, "error": message})
+        return {
+            "type": "tool_result",
+            "tool_use_id": use.id,
+            "content": f"Error: {message}",
+            "is_error": True,
+        }
 
     def _verified(self, text: str, calls: list[dict[str, Any]]) -> AgentAnswer:
         if not text:
@@ -260,7 +293,7 @@ class ClaudeEngine:
         return AgentAnswer(text, ENGINE_CLAUDE, self.params.model, calls)
 
 
-_NUMBER = re.compile(r"(?<![\w.])(-?\d+(?:[.,]\d+)?)(\s*%)?")
+_NUMBER = re.compile(r"(?<![\w.])(-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?)(\s*%)?")
 _IGNORED_CONTEXT = re.compile(r"(Category_|Col|Word|Doc|row )\s*$", re.IGNORECASE)
 
 
@@ -282,8 +315,7 @@ def _tool_numbers(calls: list[dict[str, Any]]) -> list[float]:
                 walk(item)
 
     for call in calls:
-        walk(call.get("output", {}))
-        walk(call.get("input", {}))
+        walk(call.get("output", {}))  # outputs only: a failed call's input proves nothing
     return numbers
 
 

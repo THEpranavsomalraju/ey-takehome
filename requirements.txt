@@ -20,3 +20,7 @@ python-multipart==0.0.32
 anthropic==0.117.0
 httpx==0.28.1
 truststore==0.10.4
+# Compiled transitive dependencies of pydantic and anthropic, pinned so every
+# platform installs the same binary wheels.
+pydantic-core==2.46.4
+jiter==0.17.0

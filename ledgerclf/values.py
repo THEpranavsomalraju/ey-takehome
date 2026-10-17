@@ -173,19 +173,18 @@ def _parse_amount_text(text: str) -> float | None:
     if text.endswith("-"):
         signs.append("-")
         text = text[:-1].strip()
-    if len(signs) > 1:  # "(-5)", "--5": contradictory signs are rejected, not guessed
+    if len(signs) > 1:  # "(-5)", "--5", "+-5": contradictory signs are rejected, not guessed
         return None
     number = _number_from_text(text)
     if number is None:
         return None
-    return -number if signs else number
+    return -number if "-" in signs else number
 
 
 def _strip_sign(text: str, signs: list[str]) -> str:
-    """Remove one leading sign, recording a minus in ``signs``."""
+    """Remove one leading sign, recording it in ``signs``."""
     if text[:1] in ("-", "+"):
-        if text[0] == "-":
-            signs.append("-")
+        signs.append(text[0])
         return text[1:].lstrip()
     return text
 

@@ -22,7 +22,6 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 import xlrd
-from openpyxl.utils.exceptions import InvalidFileException
 
 from ledgerclf.config import UTF16_NUL_SHARE, UTF16_SAMPLE_BYTES, UTF16_TEXT_SHARE, Limits
 from ledgerclf.exceptions import FileReadError, SchemaError
@@ -35,6 +34,7 @@ from ledgerclf.schema import (
     find_header_row,
     make_issue,
 )
+from ledgerclf.values import is_blank_cell
 
 logger = logging.getLogger(__name__)
 
@@ -49,18 +49,6 @@ _DELIMITERS = (",", ";", "\t", "|")
 # Share of NUL bytes above which content is binary rather than text with stray NULs.
 _BINARY_NUL_SHARE = 0.1
 _TEXT_ENCODINGS = ("utf-8", "cp1252")
-# Errors the Excel readers raise for damaged or unexpected workbooks.
-_EXCEL_READ_ERRORS = (
-    ValueError,
-    KeyError,
-    IndexError,
-    TypeError,
-    OSError,
-    EOFError,
-    zipfile.BadZipFile,
-    xlrd.XLRDError,
-    InvalidFileException,
-)
 _FIXED_ZIP_TIME = (2026, 1, 1, 0, 0, 0)
 _FIXED_STAMP = b"2026-01-01T00:00:00Z"
 _CORE_TIMESTAMPS = re.compile(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*(</dcterms:)")
@@ -321,9 +309,10 @@ def _parse_sheets(
         "or incomplete. Open it in Excel, save it again, and upload the new copy.",
         code="FILE_UNREADABLE",
     )
+    engine_kwargs = {"logfile": _DebugLog()} if engine == "xlrd" else {}
     try:
-        book = pd.ExcelFile(std_io.BytesIO(data), engine=engine)
-    except _EXCEL_READ_ERRORS as error:
+        book = pd.ExcelFile(std_io.BytesIO(data), engine=engine, engine_kwargs=engine_kwargs)
+    except Exception as error:  # boundary: parsers raise many error types on damaged files
         logger.debug("Excel open failed for %s", file_name, exc_info=True)
         if "encrypt" in str(error).lower():
             raise FileReadError(
@@ -340,8 +329,10 @@ def _parse_sheets(
         warnings.simplefilter("ignore", UserWarning)
         for name in book.sheet_names:
             try:
-                sheets[str(name)] = book.parse(name, header=None, dtype=object)
-            except _EXCEL_READ_ERRORS:
+                sheets[str(name)] = _without_trailing_blank_rows(
+                    book.parse(name, header=None, dtype=object)
+                )
+            except Exception:  # boundary: one damaged sheet must not hide the others
                 logger.debug("Skipping unreadable sheet %s", name, exc_info=True)
                 issues.append(
                     make_issue(
@@ -353,6 +344,28 @@ def _parse_sheets(
     if not sheets:
         raise unreadable
     return sheets, hidden, issues
+
+
+class _DebugLog:
+    """File-like sink that sends xlrd's console messages to the debug log (CLAUDE.md rule 11)."""
+
+    def write(self, text: str) -> int:
+        """Log one chunk of xlrd output."""
+        if text.strip():
+            logger.debug("xlrd: %s", text.strip())
+        return len(text)
+
+    def flush(self) -> None:
+        """Nothing is buffered."""
+
+
+def _without_trailing_blank_rows(sheet: pd.DataFrame) -> pd.DataFrame:
+    """Drop blank rows after the last filled row (a stray space far down the sheet)."""
+    has_value = np.flatnonzero(sheet.notna().any(axis=1).to_numpy())
+    for position in has_value[::-1]:
+        if not sheet.iloc[position].map(is_blank_cell).all():
+            return sheet.iloc[: position + 1]
+    return sheet.iloc[:0]
 
 
 def _hidden_sheets(book: pd.ExcelFile) -> set[str]:
@@ -490,7 +503,7 @@ def _decode(data: bytes) -> tuple[str, str, list[ValidationIssue]]:
             return data[3:].decode("cp1252", errors="replace"), "cp1252", [warning]
     utf16 = _utf16_variant(data)
     if utf16 is not None:
-        return data.decode(utf16, errors="replace").lstrip("\ufeff"), utf16, []
+        return _decode_utf16(data, utf16)
     for encoding in _TEXT_ENCODINGS:
         try:
             return data.decode(encoding), encoding, []
@@ -503,6 +516,21 @@ def _decode(data: bytes) -> tuple[str, str, list[ValidationIssue]]:
         "accented characters in the results.",
     )
     return data.decode("latin-1"), "latin-1", [warning]
+
+
+def _decode_utf16(data: bytes, codec: str) -> tuple[str, str, list[ValidationIssue]]:
+    """Decode UTF-16, ignoring an odd trailing byte and warning about any damaged character."""
+    whole = data[: len(data) - len(data) % 2]
+    text = whole.decode(codec, errors="replace").lstrip("\ufeff")
+    if len(whole) == len(data) and "\ufffd" not in text:
+        return text, codec, []
+    warning = make_issue(
+        Severity.WARNING,
+        "ENCODING_FALLBACK",
+        "Parts of this UTF-16 file are damaged (an incomplete or invalid character). They were "
+        "skipped or shown as a replacement mark; check the affected values.",
+    )
+    return text.rstrip("\ufffd"), codec, [warning]
 
 
 def _sniff_delimiter(text: str, limits: Limits) -> str:

@@ -29,6 +29,7 @@ from ledgerclf.agent import (
 from ledgerclf.agent_tools import ToolContext, ToolError, run_tool
 from ledgerclf.config import AgentParams, Paths, Settings
 from ledgerclf.server import ResultCache, create_app
+from ledgerclf.service import PredictionService
 
 
 def _tool_use(name: str, arguments: dict[str, Any], use_id: str) -> SimpleNamespace:
@@ -219,6 +220,21 @@ def test_grounding_check_rules():
     assert ungrounded_numbers("It saw 1000 rows.", calls, 1.0) == ["1000"]
 
 
+def test_grounding_reads_thousands_separators():
+    calls = [{"tool": "x", "input": {}, "output": {"amount": 1680000.5, "rows": 1680}}]
+    assert ungrounded_numbers("An amount of 1,680,000.50 across 1,680 rows.", calls, 1.0) == []
+    assert ungrounded_numbers("An amount of 1,690,000.50.", calls, 1.0) == ["1,690,000.50"]
+
+
+def test_local_tool_defect_becomes_a_tool_error_not_an_outage(service, holdout_result, monkeypatch):
+    monkeypatch.setattr(agent_module, "run_tool", lambda *args: {}["missing"])
+    calls: list[dict[str, Any]] = []
+    use = _tool_use("what_if", {"column": "Col3", "value": "1"}, "t1")
+    context = ToolContext(service, holdout_result, 1)
+    result = agent_module.ClaudeEngine._execute(context, use, calls)
+    assert result["is_error"] and "tool failed" in result["content"]
+
+
 def test_connection_resolution_order(tmp_path, monkeypatch):
     settings = Settings(
         paths=Paths.from_root(tmp_path),
@@ -249,9 +265,14 @@ def test_connection_resolution_order(tmp_path, monkeypatch):
     )
     assert resolve_connection(settings, override_key="sk-session").api_key == "sk-session"
     assert read_env_file(tmp_path / "missing") == {}
-    assert (
-        resolve_connection(Settings(paths=Paths.from_root(tmp_path / "empty"))) is not None or True
-    )
+
+
+def test_default_route_is_the_relay_without_any_key(tmp_path, monkeypatch):
+    for name in ("ANTHROPIC_API_KEY", "LEDGERCLF_RELAY_URL", "LEDGERCLF_RELAY_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    connection = resolve_connection(Settings(paths=Paths.from_root(tmp_path / "empty")))
+    assert connection is not None and connection.route == "relay"
+    assert connection.base_url == AgentParams().relay_url
 
 
 def test_offline_when_nothing_configured(service, holdout_result, monkeypatch):
@@ -294,7 +315,39 @@ def test_api_errors_are_clear_json(api):
     assert (
         api.post("/api/explain", json={"upload_id": "unknown", "row_number": 1}).status_code == 404
     )
-    assert api.post("/api/explain", json={"upload_id": "x", "row_number": 0}).status_code == 422
+    invalid = api.post("/api/explain", json={"upload_id": "x", "row_number": 0})
+    assert invalid.status_code == 422 and invalid.json()["code"] == "INVALID_REQUEST"
+    missing = api.get("/api/predict/unknown/rows").json()
+    assert missing["code"] == "NOT_FOUND" and "expired" in missing["message"]
+
+
+def test_api_unexpected_errors_are_json(service, monkeypatch):
+    client = TestClient(create_app(service), raise_server_exceptions=False)
+    monkeypatch.setattr(service, "model_info", lambda: 1 / 0)
+    response = client.get("/api/model")
+    assert response.status_code == 500 and response.json()["code"] == "INTERNAL"
+
+
+def test_api_missing_sample_file_says_how_to_fix(service, tmp_path):
+    empty = Settings(paths=Paths.from_root(tmp_path))
+    client = TestClient(create_app(PredictionService(service.bundle, None, empty)))
+    for response in (client.post("/api/predict/sample"), client.get("/api/sample/holdout")):
+        assert response.status_code == 503
+        assert response.json()["code"] == "SAMPLE_MISSING"
+        assert "python -m ledgerclf split" in response.json()["message"]
+
+
+def test_serve_refuses_a_port_in_use():
+    import socket
+
+    from ledgerclf.exceptions import ConfigError
+    from ledgerclf.server import _require_free_port
+
+    with socket.socket() as taken:
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        with pytest.raises(ConfigError, match="--port"):
+            _require_free_port("127.0.0.1", taken.getsockname()[1])
 
 
 def test_api_reports_model_status_sample(api):
@@ -347,3 +400,23 @@ def test_holdout_flag_counts_use_exact_codes(settings, tmp_path):
     )
     counts = {row["flag"]: row["rows"] for row in scored["accuracy_by_flag"]}
     assert counts == {"LOW_CONFIDENCE": 1, "UNSEEN_VENDOR": 1, "UNSEEN_VENDOR_ACCOUNT_PAIR": 1}
+
+
+def test_relay_accepts_exactly_the_agent_system_prompt():
+    import hashlib
+    from pathlib import Path
+
+    relay = (
+        Path(agent_module.__file__).resolve().parent.parent / "relay" / "api" / "v1" / "messages.js"
+    )
+    digest = hashlib.sha256(agent_module.SYSTEM_PROMPT.encode("utf-8")).hexdigest()
+    assert f'SYSTEM_PROMPT_SHA256 = "{digest}"' in relay.read_text(encoding="utf-8")
+
+
+def test_download_neutralizes_spreadsheet_formulas(api):
+    rows = "Col1,Col2,Col3,Col4,Col5,Col6,Col7\n"
+    rows += '"=HYPERLINK(""http://x"")",1,-617.60,@SUM(A1),2018-08-31,+cmd,NoDoc\n'
+    upload = api.post("/api/predict", files={"file": ("f.csv", rows.encode("utf-8"))}).json()
+    text = api.get(f"/api/predict/{upload['upload_id']}/download").content.decode("utf-8-sig")
+    assert "'=HYPERLINK" in text and "'@SUM(A1)" in text and "'+cmd" in text
+    assert ",-617.60," in text

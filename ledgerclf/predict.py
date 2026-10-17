@@ -8,6 +8,7 @@ a prediction. The same validation path serves training files and uploads.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -86,6 +87,18 @@ class PredictionResult:
         records: list[dict[str, Any]] = to_jsonable(self.predictions.to_dict(orient="records"))
         return records
 
+    def to_csv(self) -> str:
+        """Return the predictions as CSV text that is safe to open in a spreadsheet.
+
+        Text cells starting with ``=``, ``+``, ``-``, ``@``, tab, or carriage
+        return (other than plain numbers) get a leading apostrophe, so Excel
+        shows them as text instead of running them as formulas.
+        """
+        safe = self.predictions.copy()
+        for column in safe.select_dtypes(exclude=["number", "bool"]).columns:
+            safe[column] = safe[column].map(_spreadsheet_safe)
+        return safe.to_csv(index=False, lineterminator="\n")
+
     def summary(self) -> dict[str, Any]:
         """Return a JSON-safe summary for APIs and the dashboard."""
         counts = self.predictions["predicted_label"].value_counts()
@@ -104,6 +117,20 @@ class PredictionResult:
         )
 
 
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+_PLAIN_NUMBER = re.compile(r"^[+-]?\d[\d,]*(\.\d+)?$")
+
+
+def _spreadsheet_safe(value: object) -> object:
+    if (
+        isinstance(value, str)
+        and value.startswith(_FORMULA_START)
+        and not _PLAIN_NUMBER.match(value)
+    ):
+        return "'" + value
+    return value
+
+
 def predict_file(
     bundle: ModelBundle,
     source: Path | bytes,
@@ -120,7 +147,8 @@ def predict_file(
         file_name: Original file name.
         limits: Input limits (defaults from config).
         fallback_reason: Why the fallback model is active, if it is.
-        label_screen: Optional check that keeps some rows' labels unread.
+        label_screen: Check that keeps some rows' labels unread. Without one, any
+            label column is dropped unread (CLAUDE.md rule 1: fail closed).
 
     Returns:
         The prediction result.
@@ -156,13 +184,16 @@ def predict_frame(
         limits: Input limits.
         read_issues: Issues already found while reading.
         fallback_reason: Why the fallback model is active, if it is.
-        label_screen: Optional check that keeps some rows' labels unread.
+        label_screen: Check that keeps some rows' labels unread. Without one, any
+            label column is dropped unread (CLAUDE.md rule 1: fail closed).
 
     Returns:
         The prediction result.
     """
     started = time.perf_counter()
     resolved, mapping, resolve_issues = resolve_columns(raw, limits)
+    if label_screen is None:
+        resolved = resolved.drop(columns=[LABEL_COLUMN], errors="ignore")
     frame, coerce_issues = coerce_values(resolved, limits)
     issues = [*(read_issues or []), *resolve_issues, *coerce_issues]
     if label_screen is not None and LABEL_COLUMN in frame.columns:

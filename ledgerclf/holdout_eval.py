@@ -15,20 +15,24 @@ import numpy as np
 import pandas as pd
 
 from ledgerclf.artifacts import CHAMPION_BUNDLE, FALLBACK_BUNDLE, load_bundle, read_metadata
-from ledgerclf.config import HOLDOUT_FEATURES_STEM, Settings
+from ledgerclf.config import (
+    HOLDOUT_DEFAULT_REASON,
+    HOLDOUT_EVALUATION_REPORT,
+    HOLDOUT_FEATURES_STEM,
+    Settings,
+)
 from ledgerclf.evaluation import compute_metrics, confusion_table, per_class_report
 from ledgerclf.exceptions import ArtifactError, HoldoutAccessError, SchemaError
 from ledgerclf.io import sha256_file
 from ledgerclf.labels import normalize_labels
 from ledgerclf.predict import PROBABILITY_COLUMNS, predict_file
 from ledgerclf.reports import write_json, write_table
-from ledgerclf.schema import LABEL_COLUMN
+from ledgerclf.schema import LABEL_COLUMN, ROW_NUMBER
 from ledgerclf.splitting import HoldoutAccessToken, read_holdout_labels
 from ledgerclf.training import CHAMPION_NAME, FALLBACK_NAME
 
 PRODUCER = "evaluate-holdout"
-EVALUATION_FILE = "holdout/holdout_evaluation.json"
-DEFAULT_REASON = "final evaluation"
+EVALUATION_FILE = HOLDOUT_EVALUATION_REPORT
 ACCESS_LOG = "holdout/access_log.csv"
 
 
@@ -90,7 +94,7 @@ def run_holdout_evaluation(
             'look needs --rerun --reason "...", which is logged.',
             code="HOLDOUT_ALREADY_EVALUATED",
         )
-    if already and token.reason.strip() in ("", DEFAULT_REASON):
+    if already and token.reason.strip() in ("", HOLDOUT_DEFAULT_REASON):
         raise HoldoutAccessError(
             'A second holdout look needs a written reason: --rerun --reason "why".',
             code="HOLDOUT_RERUN_REASON_MISSING",
@@ -136,8 +140,8 @@ def _aligned_labels(
     predictions: pd.DataFrame, labels: pd.DataFrame, y_true: pd.Series
 ) -> np.ndarray:
     """Join labels to predictions by row number; refuse if any row was dropped or added."""
-    by_row = pd.Series(y_true.to_numpy(dtype=object), index=labels["row_number"].astype(int))
-    rows = predictions["row_number"].astype(int)
+    by_row = pd.Series(y_true.to_numpy(dtype=object), index=labels[ROW_NUMBER].astype(int))
+    rows = predictions[ROW_NUMBER].astype(int)
     if len(predictions) != len(labels) or not rows.isin(by_row.index).all():
         raise HoldoutAccessError(
             "Holdout predictions and labels do not line up row for row; the evaluation stopped. "

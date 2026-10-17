@@ -20,6 +20,8 @@ from ledgerclf.config import (
     EXIT_INTERNAL_ERROR,
     EXIT_OK,
     EXIT_USER_ERROR,
+    HOLDOUT_DEFAULT_REASON,
+    ServerParams,
     Settings,
     get_settings,
 )
@@ -28,7 +30,6 @@ from ledgerclf.logging_setup import configure
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_REASON = "final evaluation"  # same text as holdout_eval.DEFAULT_REASON; reruns replace it
 
 Handler = Callable[[argparse.Namespace, Settings], int]
 
@@ -164,7 +165,7 @@ def _cmd_predict(args: argparse.Namespace, settings: Settings) -> int:
             f"{result.metrics['accuracy']:.4f}"
         )
     if args.out:
-        _write_output(args.out, result.predictions.to_csv(index=False), "utf-8-sig")
+        _write_output(args.out, result.to_csv(), "utf-8-sig")
     return EXIT_OK
 
 
@@ -264,12 +265,13 @@ def _add_arguments(name: str, sub: argparse.ArgumentParser) -> None:
         sub.add_argument("--rerun", action="store_true", help="allow a second, logged evaluation")
         sub.add_argument(
             "--reason",
-            default=DEFAULT_REASON,
+            default=HOLDOUT_DEFAULT_REASON,
             help="reason written to the access log (a rerun needs its own reason)",
         )
     if name == "serve":
-        sub.add_argument("--host", default="127.0.0.1", help="interface to bind")
-        sub.add_argument("--port", type=int, default=8000, help="port to listen on")
+        server = ServerParams()
+        sub.add_argument("--host", default=server.host, help="interface to bind")
+        sub.add_argument("--port", type=int, default=server.port, help="port to listen on")
         sub.add_argument("--no-browser", action="store_true", help="do not open a browser")
     if name in ("benchmark", "tune"):
         sub.add_argument("--quick", action="store_true", help="reduced budget for development")

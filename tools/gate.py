@@ -51,8 +51,6 @@ HOLDOUT_ALLOWED: dict[str, tuple[str, ...]] = {
     "ledgerclf/holdout_eval.py": HOLDOUT_SENSITIVE,
     "ledgerclf/config.py": ("Challenge_Data",),
     "ledgerclf/eda.py": ("load_full_file_structure",),
-    # service.py only hashes the labeled holdout file to withhold its metrics (rule 1).
-    "ledgerclf/service.py": ("HOLDOUT_WITH_LABELS_FILE",),
 }
 SCANNED_DIRS = ("ledgerclf", "tools", "notebooks", "research", "dashboard")
 

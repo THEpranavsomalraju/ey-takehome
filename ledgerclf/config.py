@@ -32,6 +32,8 @@ UTF16_NUL_SHARE = 0.9  # share of NUL bytes in the high-byte positions of ASCII 
 UTF16_TEXT_SHARE = 0.1  # maximum NUL share in the character positions
 
 HOLDOUT_FEATURES_STEM = "holdout_features"
+HOLDOUT_EVALUATION_REPORT = "holdout/holdout_evaluation.json"  # exists once the holdout is released
+HOLDOUT_DEFAULT_REASON = "final evaluation"  # access-log reason; a rerun must give its own
 
 
 @dataclass(frozen=True)
@@ -278,11 +280,24 @@ class AgentParams:
     max_turns: int = 6
     max_tokens: int = 4000
     timeout_seconds: float = 25.0
+    deadline_seconds: float = 60.0  # whole conversation; past it the offline engine answers
     similar_rows: int = 5
     # The relay holds the key; this shared token only keeps casual scanners out.
     relay_url: str = "https://ledgerclf-agent-relay.vercel.app/api"
     relay_token: str = "69ffdcce74916b566ca3c2004eeab862"
     percent_tolerance: float = 1.0
+
+
+@dataclass(frozen=True)
+class ServerParams:
+    """Dashboard API settings (``python -m ledgerclf serve``)."""
+
+    host: str = "127.0.0.1"  # local only; pass --host 0.0.0.0 inside Docker
+    port: int = 8000
+    cached_uploads: int = 20  # recent results kept in memory for explanations
+    default_page_rows: int = 25
+    max_page_rows: int = 500
+    browser_delay_seconds: float = 1.5  # wait for the server before opening the browser
 
 
 @dataclass(frozen=True)
@@ -301,6 +316,7 @@ class Settings:
     explain: ExplainParams = field(default_factory=ExplainParams)
     flag_policy: FlagPolicyParams = field(default_factory=FlagPolicyParams)
     agent: AgentParams = field(default_factory=AgentParams)
+    server: ServerParams = field(default_factory=ServerParams)
     benchmark: BenchmarkParams = field(default_factory=BenchmarkParams)
     tuning: TuningParams = field(default_factory=TuningParams)
     seeds: tuple[int, ...] = (0, 1, 2)

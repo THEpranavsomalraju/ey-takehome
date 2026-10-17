@@ -1,8 +1,10 @@
 """Row fingerprints: recognize uploaded rows the project already knows.
 
-A fingerprint joins a row's inputs in model form (normalized text, amount in
-cents, period index), so the same row matches whether it arrives as the
-original workbook, a CSV re-save, or a copy pasted into another file. The
+A fingerprint joins the inputs the model reads, in model form (normalized
+text, amount in cents, period index), so the same row matches whether it
+arrives as the original workbook, a CSV re-save, or a copy pasted into another
+file. Col2 is left out on purpose: the model ignores it, so deleting or
+editing it must not make a known row look new. The
 service uses it to keep holdout labels unread and to mark in-sample accuracy.
 """
 
@@ -12,9 +14,10 @@ import numpy as np
 import pandas as pd
 
 from ledgerclf.features import normalize_text
-from ledgerclf.schema import AMOUNT, PERIOD, TEXT_COLUMNS
+from ledgerclf.schema import AMOUNT, MODEL_INPUT_COLUMNS, PERIOD, TEXT_COLUMNS
 
 FIELD_SEPARATOR = "\x1f"
+FINGERPRINT_TEXT_COLUMNS = tuple(c for c in TEXT_COLUMNS if c in MODEL_INPUT_COLUMNS)
 
 
 def _number_texts(values: pd.Series, template: str) -> list[str]:
@@ -31,7 +34,7 @@ def row_fingerprints(frame: pd.DataFrame) -> np.ndarray:
     Returns:
         An object array of fingerprints in row order.
     """
-    columns = [[normalize_text(v) for v in frame[column]] for column in TEXT_COLUMNS]
+    columns = [[normalize_text(v) for v in frame[column]] for column in FINGERPRINT_TEXT_COLUMNS]
     columns.append(_number_texts(frame[AMOUNT], "{:.2f}"))
     columns.append(_number_texts(frame[PERIOD], "{:.0f}"))
     return np.asarray(

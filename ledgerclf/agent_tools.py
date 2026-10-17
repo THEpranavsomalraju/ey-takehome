@@ -16,6 +16,7 @@ import pandas as pd
 from sklearn.preprocessing import normalize
 
 from ledgerclf.exceptions import LedgerClfError
+from ledgerclf.explain import explained_row
 from ledgerclf.features import normalize_text
 from ledgerclf.jsonsafe import to_jsonable
 from ledgerclf.labels import CANONICAL_CLASSES
@@ -23,15 +24,20 @@ from ledgerclf.predict import PredictionResult
 from ledgerclf.reference import PAIR_KEY, pair_key
 from ledgerclf.schema import (
     AMOUNT,
+    AMOUNT_WAS_MISSING,
     COL_ACCOUNT,
     COL_AMOUNT,
     COL_DESCRIPTION,
     COL_DOC_TYPE,
     COL_PERIOD,
     COL_VENDOR,
+    INPUT_COLUMNS,
     PERIOD,
+    PERIOD_WAS_MISSING,
+    SOURCE_ROW,
+    coerce_values,
 )
-from ledgerclf.values import parse_amount, parse_date, period_label
+from ledgerclf.values import period_label
 
 LOOKUP_KINDS = {
     "vendor": COL_VENDOR,
@@ -84,8 +90,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "what_if",
         "description": (
             "Re-score the explained row with one input changed and return the new prediction. "
-            "column is one of Col1, Col3, Col4, Col5, Col6, Col7; value is the new cell text "
-            "(an amount like 1680 for Col3, a date like 2018-08-31 for Col5)."
+            f"column is one of {', '.join(WHAT_IF_COLUMNS)}; value is the new cell text "
+            f"(an amount like 1680 for {COL_AMOUNT}, a date like 2018-08-31 for {COL_PERIOD})."
         ),
         "input_schema": {
             "type": "object",
@@ -185,10 +191,8 @@ def similar_rows(context: ToolContext) -> dict[str, Any]:
     """Return the nearest training rows by cosine similarity of feature vectors."""
     index = context.service.training_index()
     pipeline = context.service.bundle.pipeline
-    position = context.row_number - 1
-    vector = normalize(
-        pipeline.named_steps["features"].transform(context.result.frame.iloc[[position]])
-    )
+    inputs = explained_row(context.result, context.row_number).inputs
+    vector = normalize(pipeline.named_steps["features"].transform(inputs))
     scores = np.asarray((index.matrix @ vector.T).toarray()).ravel()
     count = context.service.settings.agent.similar_rows
     order = np.argsort(-scores, kind="stable")[:count]
@@ -199,10 +203,10 @@ def similar_rows(context: ToolContext) -> dict[str, Any]:
             {
                 "similarity": round(float(scores[i]), 4),
                 "label": str(index.y[i]),
-                "Col1": row[COL_VENDOR],
-                "Col4": row[COL_DESCRIPTION],
-                "Col6": row[COL_ACCOUNT],
-                "Col7": row[COL_DOC_TYPE],
+                COL_VENDOR: row[COL_VENDOR],
+                COL_DESCRIPTION: row[COL_DESCRIPTION],
+                COL_ACCOUNT: row[COL_ACCOUNT],
+                COL_DOC_TYPE: row[COL_DOC_TYPE],
                 "amount": None if pd.isna(row[AMOUNT]) else round(float(row[AMOUNT]), 2),
                 "period": None if pd.isna(row[PERIOD]) else period_label(int(row[PERIOD])),
             }
@@ -218,19 +222,17 @@ def what_if(context: ToolContext, column: str, value: str) -> dict[str, Any]:
     """Re-score the row with one input changed."""
     if column not in WHAT_IF_COLUMNS:
         raise ToolError(f"Column must be one of {', '.join(WHAT_IF_COLUMNS)}.")
-    row = context.result.frame.iloc[[context.row_number - 1]].copy()
-    if column == COL_AMOUNT:
-        amount = parse_amount(value)
-        if amount is None:
-            raise ToolError(f"'{value}' is not a readable amount.")
-        row[AMOUNT] = amount
-    elif column == COL_PERIOD:
-        parsed = parse_date(value, day_first=False)
-        if parsed is None:
-            raise ToolError(f"'{value}' is not a readable date.")
-        row[PERIOD] = float(parsed.period_index)
-    else:
-        row[column] = value
+    original = explained_row(context.result, context.row_number).inputs
+    edited = original[[SOURCE_ROW, *INPUT_COLUMNS]].copy()
+    edited[column] = value
+    try:  # the same cleaning as an upload, so the answer matches re-uploading the row
+        row, _ = coerce_values(edited.reset_index(drop=True), context.service.settings.limits)
+    except LedgerClfError as error:
+        raise ToolError(f"'{value}' cannot be scored: {error.message}") from error
+    if column == COL_AMOUNT and bool(row[AMOUNT_WAS_MISSING].iloc[0]):
+        raise ToolError(f"'{value}' is not a readable amount.")
+    if column == COL_PERIOD and bool(row[PERIOD_WAS_MISSING].iloc[0]):
+        raise ToolError(f"'{value}' is not a readable date.")
     proba = context.service.bundle.pipeline.predict_proba(row)[0]
     order = np.argsort(-proba)
     original = context.payload["prediction"]

@@ -8,6 +8,7 @@ exactly to the model's logit margin, so the agent never estimates numbers.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -42,6 +43,7 @@ from ledgerclf.schema import (
     COL_VENDOR,
     INPUT_COLUMNS,
     ROW_NUMBER,
+    SOURCE_ROW,
 )
 from ledgerclf.values import period_label
 
@@ -68,8 +70,21 @@ class ExplanationError(LedgerClfError):
     default_code = "EXPLAIN_ROW_INVALID"
 
 
-def _position(result: PredictionResult, row_number: object) -> int:
-    """Return the table position of ``row_number`` (the row_number column, not the order)."""
+@dataclass(frozen=True)
+class ExplainedRow:
+    """One row of a prediction result: its table entry and its coerced inputs."""
+
+    prediction: pd.Series
+    inputs: pd.DataFrame
+    frame_position: int
+
+
+def explained_row(result: PredictionResult, row_number: object) -> ExplainedRow:
+    """Find a row by its ``row_number`` value (not its position, so sorted tables work).
+
+    Raises:
+        ExplanationError: When the row number is not a whole number or does not exist.
+    """
     total = len(result.predictions)
     if isinstance(row_number, bool) or not isinstance(row_number, int | np.integer):
         raise ExplanationError(f"Row number must be a whole number between 1 and {total}.")
@@ -78,7 +93,14 @@ def _position(result: PredictionResult, row_number: object) -> int:
         raise ExplanationError(
             f"Row {row_number} does not exist. Choose a row between 1 and {total}."
         )
-    return position
+    frame_position = _locate(result.frame, int(row_number))
+    if frame_position is None:
+        raise ExplanationError(
+            "The predictions no longer match their inputs. Predict the file again."
+        )
+    return ExplainedRow(
+        result.predictions.iloc[position], result.frame.iloc[[frame_position]], frame_position
+    )
 
 
 def _locate(table: pd.DataFrame, row_number: int) -> int | None:
@@ -110,14 +132,8 @@ def explain_row(bundle: ModelBundle, result: PredictionResult, row_number: int) 
     """
     params = ExplainParams()
     _require_same_model(bundle, result)
-    position = _position(result, row_number)
-    prediction = result.predictions.iloc[position]
-    frame_position = _locate(result.frame, int(row_number))
-    if frame_position is None:
-        raise ExplanationError(
-            "The predictions no longer match their inputs. Predict the file again."
-        )
-    row = result.frame.iloc[[frame_position]]
+    target = explained_row(result, row_number)
+    prediction, row = target.prediction, target.inputs
     features = bundle.pipeline.named_steps["features"]
     model = bundle.pipeline.named_steps["model"]
     matrix = features.transform(row)
@@ -129,27 +145,14 @@ def explain_row(bundle: ModelBundle, result: PredictionResult, row_number: int) 
     bias = float(parts.bias[0, k] - parts.bias[0, r])
     by_group = _by_group(margin, names)
     top = _top_features(margin, names, np.asarray(matrix[0].toarray()).ravel(), params.top_features)
-    evidence = _evidence(
-        row, top, bundle.reference, str(prediction["predicted_label"]), params.evidence_tokens
-    )
-    flags = _flags(result, frame_position)
     payload = {
         "schema_version": SCHEMA_VERSION,
-        "row_number": int(prediction["row_number"]),
-        "source_row": int(prediction["source_row"]),
+        "row_number": int(prediction[ROW_NUMBER]),
+        "source_row": int(prediction[SOURCE_ROW]),
         "input": {c: prediction[c] for c in INPUT_COLUMNS},
-        "prediction": {
-            "label": prediction["predicted_label"],
-            "probability": round(float(prediction["confidence"]), params.display_decimals),
-            "runner_up": {
-                "label": prediction["runner_up_label"],
-                "probability": round(
-                    float(prediction["runner_up_probability"]), params.display_decimals
-                ),
-            },
-            "logit_margin": float(parts.logits[0, k] - parts.logits[0, r]),
-            "review_required": bool(prediction["review_required"]),
-        },
+        "prediction": _prediction_block(
+            prediction, float(parts.logits[0, k] - parts.logits[0, r]), params
+        ),
         "probabilities": {
             c: round(float(prediction[f"p_{c}"]), params.display_decimals)
             for c in CANONICAL_CLASSES
@@ -167,12 +170,30 @@ def explain_row(bundle: ModelBundle, result: PredictionResult, row_number: int) 
             "by_group": by_group,
             "top_features": top,
         },
-        "evidence": evidence,
-        "flags": flags,
+        "evidence": _evidence(
+            row, top, bundle.reference, str(prediction["predicted_label"]), params.evidence_tokens
+        ),
+        "flags": _flags(result, target.frame_position),
         "context": _context(bundle.reference, row),
     }
     payload["fallback_text"] = render_fallback_text(payload)
     return to_jsonable(payload)
+
+
+def _prediction_block(
+    prediction: pd.Series, margin: float, params: ExplainParams
+) -> dict[str, Any]:
+    decimals = params.display_decimals
+    return {
+        "label": prediction["predicted_label"],
+        "probability": round(float(prediction["confidence"]), decimals),
+        "runner_up": {
+            "label": prediction["runner_up_label"],
+            "probability": round(float(prediction["runner_up_probability"]), decimals),
+        },
+        "logit_margin": margin,
+        "review_required": bool(prediction["review_required"]),
+    }
 
 
 def _by_group(margin: np.ndarray, names: list[str]) -> list[dict[str, Any]]:

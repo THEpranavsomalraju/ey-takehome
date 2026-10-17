@@ -40,7 +40,7 @@ from ledgerclf.labels import CANONICAL_CLASSES, FIVE_CLASSES
 from ledgerclf.models import make_blend, make_calibrated_logistic
 from ledgerclf.predict import PROBABILITY_COLUMNS, predict_file
 from ledgerclf.reference import build_reference
-from ledgerclf.schema import INPUT_COLUMNS
+from ledgerclf.schema import INPUT_COLUMNS, ROW_NUMBER
 from ledgerclf.selection import CHAMPION_FILE
 from ledgerclf.splitting import MANIFEST_FILE, TrainingData, load_split, load_training_frame
 
@@ -196,7 +196,7 @@ def _write_samples(settings: Settings, data: TrainingData, bundles: dict[str, Mo
     resources.mkdir(parents=True, exist_ok=True)
     path = resources / SAMPLE_ROWS_FILE
     sample_rows(data).to_csv(path, index=False, encoding="utf-8", lineterminator="\n")
-    expected = pd.DataFrame({"row_number": np.arange(1, len(FIVE_CLASSES) + 1)})
+    expected = pd.DataFrame({ROW_NUMBER: np.arange(1, len(FIVE_CLASSES) + 1)})
     for name, bundle in bundles.items():
         result = predict_file(bundle, path, path.name, settings.limits)
         expected[f"predicted_label_{name}"] = result.predictions["predicted_label"].to_numpy()
@@ -214,7 +214,7 @@ def _write_golden(settings: Settings, bundles: dict[str, ModelBundle]) -> None:
     for name, bundle in bundles.items():
         result = predict_file(bundle, source, source.name, settings.limits)
         columns = [
-            "row_number",
+            ROW_NUMBER,
             "predicted_label",
             "confidence",
             *PROBABILITY_COLUMNS,

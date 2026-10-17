@@ -2,7 +2,9 @@
 //
 // The local app calls this endpoint instead of api.anthropic.com, so graders need no API
 // key and the project owner's key never leaves Vercel. The relay only accepts requests
-// shaped like the agent's: a fixed model, a capped output length, and the agent's tools.
+// shaped like the agent's: a fixed model, a capped output length, exactly the agent's four
+// tools, and the agent's own system prompt (checked by hash). Any other field is dropped.
+import { createHash } from "node:crypto";
 
 const UPSTREAM = "https://api.anthropic.com/v1/messages";
 const ALLOWED_MODEL = "claude-haiku-5-5";
@@ -15,6 +17,9 @@ const ALLOWED_TOOLS = new Set([
   "find_similar_training_rows",
   "what_if",
 ]);
+// sha256 of ledgerclf.agent.SYSTEM_PROMPT; tests/integration/test_agent_and_server.py keeps it in sync.
+const SYSTEM_PROMPT_SHA256 = "a3ec85719311bba48d2ea01546f53318c36c1d8aea20d5e90a358214b0191c1b";
+const ALLOWED_EFFORT = "low";
 const RATE_LIMIT_PER_MINUTE = 40;
 const recentRequests = new Map(); // per instance, best effort
 
@@ -36,15 +41,21 @@ function validate(body) {
   if (!Array.isArray(body.messages) || body.messages.length > MAX_MESSAGES) {
     return "Too many messages.";
   }
-  const tools = Array.isArray(body.tools) ? body.tools : [];
-  if (tools.some((tool) => !ALLOWED_TOOLS.has(tool.name))) return "Unknown tool.";
+  const names = Array.isArray(body.tools) ? body.tools.map((tool) => tool && tool.name) : [];
+  if (names.length !== ALLOWED_TOOLS.size || names.some((name) => !ALLOWED_TOOLS.has(name))) {
+    return "Requests must carry exactly the agent's tools.";
+  }
+  if (typeof body.system !== "string") return "Missing system prompt.";
+  const hash = createHash("sha256").update(body.system, "utf8").digest("hex");
+  if (hash !== SYSTEM_PROMPT_SHA256) return "Unknown system prompt.";
   return null;
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") return reject(res, 405, "Use POST.");
   const expected = process.env.RELAY_TOKEN || "";
-  if (expected && req.headers["x-relay-token"] !== expected) {
+  if (!expected) return reject(res, 503, "Relay is not configured.");
+  if (req.headers["x-relay-token"] !== expected) {
     return reject(res, 401, "Invalid relay token.");
   }
   const ip = String(req.headers["x-forwarded-for"] || "unknown").split(",")[0].trim();
@@ -53,11 +64,13 @@ export default async function handler(req, res) {
   if (problem) return reject(res, 400, problem);
 
   const body = {
-    ...req.body,
     model: ALLOWED_MODEL,
     max_tokens: Math.min(Number(req.body.max_tokens) || MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS),
+    system: req.body.system,
+    tools: req.body.tools,
+    messages: req.body.messages,
+    output_config: { effort: ALLOWED_EFFORT },
   };
-  delete body.stream;
   const headers = {
     "content-type": "application/json",
     "x-api-key": process.env.ANTHROPIC_API_KEY || "",

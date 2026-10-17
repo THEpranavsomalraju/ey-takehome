@@ -193,6 +193,10 @@ class SignedLogAmount(BaseEstimator, TransformerMixin):
         return np.asarray(["amount_signed_log"], dtype=object)
 
 
+CENTS_PER_UNIT = 100
+CENTS_EXACT_LIMIT = 2.0**53 / CENTS_PER_UNIT  # above this, float64 cannot hold every cent
+
+
 class AmountFlags(BaseEstimator, TransformerMixin):
     """Binary flags: negative amount (credit) and round amount (multiple of the modulus).
 
@@ -212,9 +216,13 @@ class AmountFlags(BaseEstimator, TransformerMixin):
     def transform(self, X: Any) -> np.ndarray:
         """Return ``[is_negative, is_round]`` for every row."""
         amount = np.asarray(X, dtype=float)[:, 0]
-        cents = np.round(np.abs(amount) * 100)
-        with np.errstate(invalid="ignore"):
-            is_round = (np.fmod(cents, round(self.modulus * 100)) == 0) & (cents != 0)
+        magnitude = np.abs(amount)
+        exact = magnitude < CENTS_EXACT_LIMIT
+        with np.errstate(over="ignore", invalid="ignore"):
+            cents = np.round(np.where(exact, magnitude, 0.0) * CENTS_PER_UNIT)
+            in_cents = (np.fmod(cents, round(self.modulus * CENTS_PER_UNIT)) == 0) & (cents != 0)
+            in_units = np.fmod(magnitude, self.modulus) == 0
+        is_round = np.where(exact, in_cents, in_units)
         return np.column_stack([amount < 0, is_round]).astype(float)
 
     def get_feature_names_out(self, input_features: Any = None) -> np.ndarray:

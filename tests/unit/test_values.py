@@ -150,3 +150,8 @@ def test_ambiguity_detection():
     assert not is_ambiguous_numeric_date("04/04/2018")
     assert not is_ambiguous_numeric_date("13/04/2018")
     assert not is_ambiguous_numeric_date(43343)
+
+
+@pytest.mark.parametrize("text", ["+-5", "-+5", "+5-", "(+5)"])
+def test_mixed_plus_and_minus_signs_are_rejected(text):
+    assert parse_amount(text) is None

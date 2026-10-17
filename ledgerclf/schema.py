@@ -189,12 +189,20 @@ def find_header_row(raw: pd.DataFrame, limits: Limits) -> int | None:
 
     Returns:
         The 0-based row index of the first row where enough cells match
-        known column names, or None when no row qualifies.
+        known column names, or None when no row qualifies. Blank rows do not
+        count toward the scan depth, so empty lines above a header are skipped.
     """
-    for position in range(min(limits.header_scan_rows, len(raw))):
-        names = {canonical_header(v) for v in raw.iloc[position].tolist()} - {None}
+    scanned = 0
+    for position in range(len(raw)):
+        cells = raw.iloc[position].tolist()
+        if all(is_blank_cell(v) for v in cells):
+            continue
+        names = {canonical_header(v) for v in cells} - {None}
         if len(names & set(INPUT_COLUMNS)) >= limits.header_min_matches:
             return position
+        scanned += 1
+        if scanned >= limits.header_scan_rows:
+            break
     return None
 
 

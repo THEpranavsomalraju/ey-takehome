@@ -29,12 +29,12 @@ def holdout_rows(settings) -> pd.DataFrame:
 
 @pytest.fixture(scope="module")
 def unseen_rows(holdout_rows) -> pd.DataFrame:
-    """Holdout features with a new Col2, so they match neither holdout nor training rows.
+    """Holdout features with new amounts, so they match neither holdout nor training rows.
 
     Labels attached to real holdout rows stay unread before the holdout
     evaluation (DECISIONS.md D35), so label-handling tests use these rows.
     """
-    return holdout_rows.assign(Col2=[f"T{i:05d}" for i in range(len(holdout_rows))])
+    return holdout_rows.assign(Col3=[f"{777000 + i}.13" for i in range(len(holdout_rows))])
 
 
 def _labels(result) -> list[str]:
