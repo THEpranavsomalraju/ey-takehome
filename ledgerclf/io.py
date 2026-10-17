@@ -560,6 +560,8 @@ def write_xlsx_deterministic(frame: pd.DataFrame, path: Path, sheet_name: str = 
 
     openpyxl stamps the save time into ``docProps/core.xml`` and every zip
     entry; both are pinned so that reruns produce byte-identical files.
+    Entries are stored uncompressed: compressed bytes depend on the zlib
+    build (Python 3.14 on Windows ships zlib-ng), stored bytes do not.
 
     Args:
         frame: Table to write (no index).
@@ -570,12 +572,12 @@ def write_xlsx_deterministic(frame: pd.DataFrame, path: Path, sheet_name: str = 
         frame.to_excel(writer, index=False, sheet_name=sheet_name)
     with zipfile.ZipFile(path) as source:
         entries = [(info.filename, source.read(info.filename)) for info in source.infolist()]
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as target:
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as target:
         for name, payload in entries:
             if name == "docProps/core.xml":
                 payload = _CORE_TIMESTAMPS.sub(rb"\g<1>" + _FIXED_STAMP + rb"\g<2>", payload)
             info = zipfile.ZipInfo(name, date_time=_FIXED_ZIP_TIME)
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED
             info.create_system = _ZIP_CREATE_SYSTEM  # otherwise 0 on Windows, 3 elsewhere
             target.writestr(info, payload)
 
