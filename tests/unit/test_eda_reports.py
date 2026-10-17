@@ -86,12 +86,9 @@ def test_signed_log_and_small_helpers():
     mix = col2_type_mix(pd.Series([1, "4.80P+11", None], dtype=object))
     assert mix["rows"].tolist() == [1, 1, 1]
     resolved = pd.DataFrame(
-        {
-            c: ["x"]
-            for c in ["Col1", "Col2", "Col3", "Col4", "Col5", "Col6", "Col7", "ClassificationLabel"]
-        }
+        {c: ["x"] for c in ["Col1", "Col2", "Col3", "Col4", "Col5", "Col6", "Col7"]}
     )
-    assert schema_summary(resolved)["rows"] == 1
+    assert schema_summary(resolved, pd.Series(["Category_1"]))["rows"] == 1
 
 
 def test_to_jsonable_converts_numpy_and_nan():

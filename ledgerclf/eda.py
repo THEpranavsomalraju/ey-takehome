@@ -20,7 +20,6 @@ from scipy.stats import chi2_contingency
 from sklearn.metrics import mutual_info_score, normalized_mutual_info_score
 
 from ledgerclf.config import Settings
-from ledgerclf.io import read_table
 from ledgerclf.labels import CANONICAL_CLASSES, normalize_labels
 from ledgerclf.reports import write_json, write_table
 from ledgerclf.schema import (
@@ -37,9 +36,13 @@ from ledgerclf.schema import (
     MISSING_TOKEN,
     PERIOD,
     TOKEN_COLUMNS,
-    resolve_columns,
 )
-from ledgerclf.splitting import ROW_ID, TrainingData, load_training_frame
+from ledgerclf.splitting import (
+    ROW_ID,
+    TrainingData,
+    load_full_file_structure,
+    load_training_frame,
+)
 from ledgerclf.values import is_missing, period_label
 
 logger = logging.getLogger(__name__)
@@ -80,11 +83,12 @@ def _class_table(keys: pd.Series, y: np.ndarray, key_name: str) -> pd.DataFrame:
     return table.reset_index()
 
 
-def schema_summary(resolved: pd.DataFrame) -> dict[str, Any]:
+def schema_summary(resolved: pd.DataFrame, labels_raw: pd.Series) -> dict[str, Any]:
     """Audit every column of the full raw file: Python types, uniques, missing values."""
+    full = resolved.assign(**{LABEL_COLUMN: labels_raw.to_numpy()})
     columns = {}
     for column in [*INPUT_COLUMNS, LABEL_COLUMN]:
-        values = resolved[column]
+        values = full[column]
         present = values[~values.map(is_missing)]
         columns[column] = {
             "python_types": dict(Counter(type(v).__name__ for v in present).most_common()),
@@ -93,7 +97,7 @@ def schema_summary(resolved: pd.DataFrame) -> dict[str, Any]:
             "inferred_role": INFERRED_ROLES[column],
         }
     return {
-        "rows": len(resolved),
+        "rows": len(full),
         "columns": [*INPUT_COLUMNS, LABEL_COLUMN],
         "column_details": columns,
         "note": "Roles are working hypotheses from value patterns; "
@@ -546,7 +550,7 @@ def _builders(
 ) -> dict[str, ReportBuilder]:
     frame, y, groups = training.frame, training.y, training.groups
     return {
-        "eda/schema_summary.json": lambda: schema_summary(resolved),
+        "eda/schema_summary.json": lambda: schema_summary(resolved, labels_raw),
         "eda/raw_label_mapping.csv": lambda: raw_label_mapping(labels_raw),
         "eda/class_distribution.csv": lambda: class_distribution(y),
         "eda/missing_values.csv": lambda: missing_values(frame, y),
@@ -583,10 +587,7 @@ def run_eda(settings: Settings) -> list[str]:
     Returns:
         The report paths written, relative to ``reports/``.
     """
-    raw, _, _ = read_table(settings.paths.raw_data, settings.paths.raw_data.name, settings.limits)
-    resolved, _, _ = resolve_columns(raw, settings.limits)
-    resolved = resolved.reset_index(drop=True)
-    labels_raw = resolved[LABEL_COLUMN]
+    resolved, labels_raw = load_full_file_structure(settings)
     training = load_training_frame(settings)
     builders = _builders(resolved, labels_raw, training)
     for file, (title, description) in EDA_CATALOG.items():

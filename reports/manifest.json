@@ -2,6 +2,146 @@
   "reports": [
     {
       "columns": [
+        "variant",
+        "accuracy_mean",
+        "accuracy_std",
+        "macro_f1_5_mean",
+        "delta_accuracy",
+        "delta_macro_f1_5",
+        "recall_Category_1",
+        "recall_Category_2",
+        "recall_Category_3",
+        "recall_Category_4",
+        "recall_Category_5",
+        "recall_Category_6"
+      ],
+      "description": "Drop each feature group in turn, or add Col2 format features or bigrams; deltas versus the full feature set.",
+      "file": "benchmark/ablation.csv",
+      "producer": "benchmark",
+      "title": "Feature ablation (logistic, power 0)"
+    },
+    {
+      "columns": [
+        "model",
+        "power",
+        "cv_accuracy",
+        "cv_macro_f1_5",
+        "oot_accuracy",
+        "oot_macro_f1_5",
+        "oot_majority_rows_predicted_rare"
+      ],
+      "description": "Logistic and log-odds blend at class weight powers 0 to 1: CV accuracy, macro F1, out-of-time accuracy, and Category_1 rows predicted as a rare class out of time.",
+      "file": "benchmark/class_weight_dial.csv",
+      "producer": "benchmark",
+      "title": "Class weight dial"
+    },
+    {
+      "columns": [
+        "model",
+        "accuracy_mean",
+        "accuracy_std",
+        "macro_f1_5_mean",
+        "macro_f1_5_std",
+        "macro_f1_6_mean",
+        "balanced_accuracy_mean",
+        "recall_Category_1",
+        "recall_Category_2",
+        "recall_Category_3",
+        "recall_Category_4",
+        "recall_Category_5",
+        "recall_Category_6",
+        "log_loss_mean",
+        "fit_seconds",
+        "folds",
+        "note"
+      ],
+      "description": "Every model on grouped 5-fold CV over 3 seeds (15 folds): accuracy mean and std over folds; other metrics on pooled out-of-fold predictions per seed, averaged over seeds.",
+      "file": "benchmark/leaderboard.csv",
+      "producer": "benchmark",
+      "title": "Model leaderboard"
+    },
+    {
+      "columns": [
+        "model",
+        "seed",
+        "accuracy",
+        "macro_f1_5",
+        "macro_f1_6",
+        "balanced_accuracy",
+        "recall_Category_1",
+        "recall_Category_2",
+        "recall_Category_3",
+        "recall_Category_4",
+        "recall_Category_5",
+        "recall_Category_6",
+        "log_loss",
+        "brier",
+        "ece"
+      ],
+      "description": "Pooled out-of-fold metrics of every model for each CV seed.",
+      "file": "benchmark/leaderboard_per_seed.csv",
+      "producer": "benchmark",
+      "title": "Leaderboard per seed"
+    },
+    {
+      "columns": [
+        "min_child_samples",
+        "accuracy_mean",
+        "accuracy_std",
+        "macro_f1_5_mean",
+        "recall_Category_1",
+        "recall_Category_2",
+        "recall_Category_3",
+        "recall_Category_4",
+        "recall_Category_5",
+        "recall_Category_6"
+      ],
+      "description": "LightGBM with min_child_samples from 1 to 20. Rare classes need very small leaves.",
+      "file": "benchmark/leaf_size_effect.csv",
+      "producer": "benchmark",
+      "title": "LightGBM minimum leaf size"
+    },
+    {
+      "columns": [
+        "logistic_p0",
+        "logistic_p1",
+        "logodds_blend_p0",
+        "quick_mode",
+        "seeds"
+      ],
+      "description": "Train on periods up to 2018-09, test on 2018-10 to 2018-12: metrics, majority rate, false rare-class alarms.",
+      "file": "benchmark/oot_detail.json",
+      "producer": "benchmark",
+      "title": "Out-of-time detail"
+    },
+    {
+      "columns": [
+        "model",
+        "pair",
+        "rows",
+        "accuracy"
+      ],
+      "description": "Out-of-fold accuracy (grouped CV, seed 0) for rows whose vendor-account pair was or was not in the fold's training rows.",
+      "file": "benchmark/unseen_pair_accuracy.csv",
+      "producer": "benchmark",
+      "title": "Accuracy by seen versus unseen vendor-account pair"
+    },
+    {
+      "columns": [
+        "model",
+        "scheme",
+        "rows_scored",
+        "accuracy",
+        "macro_f1_5",
+        "balanced_accuracy"
+      ],
+      "description": "Grouped CV, random CV (leakage demonstration), unseen-vendor CV, and out-of-time evaluation for logistic and blend models.",
+      "file": "benchmark/validation_schemes.csv",
+      "producer": "benchmark",
+      "title": "Validation schemes"
+    },
+    {
+      "columns": [
         "text_amount_doc",
         "text_only"
       ],

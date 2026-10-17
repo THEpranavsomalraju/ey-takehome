@@ -217,12 +217,21 @@ class SplitResult:
 
 @dataclass(frozen=True)
 class LabeledFrame:
-    """The full raw file: raw cells, coerced frame, canonical labels, and group ids."""
+    """The full raw file: raw cells, coerced frame, canonical labels, and group ids.
+
+    ``raw`` is indexed by spreadsheet row (``source_row``) so that raw cells are
+    always looked up by key, never by position.
+    """
 
     raw: pd.DataFrame
     frame: pd.DataFrame
     y: np.ndarray
     groups: np.ndarray
+    first_data_row: int
+
+    def raw_rows(self, row_ids: np.ndarray) -> pd.DataFrame:
+        """Return the raw cells of the given row ids, in that order."""
+        return self.raw.loc[np.asarray(row_ids) + self.first_data_row]
 
 
 def load_labeled_raw(paths: Paths, limits: Limits) -> LabeledFrame:
@@ -258,7 +267,9 @@ def load_labeled_raw(paths: Paths, limits: Limits) -> LabeledFrame:
     first_data_row = int(resolved[SOURCE_ROW].iloc[0])
     frame = frame.copy()
     frame.insert(0, ROW_ID, frame[SOURCE_ROW].to_numpy() - first_data_row)
-    return LabeledFrame(resolved, frame, labels.to_numpy(dtype=object), build_group_key(frame))
+    raw_cells = resolved.set_index(SOURCE_ROW, drop=False)
+    groups = build_group_key(frame)
+    return LabeledFrame(raw_cells, frame, labels.to_numpy(dtype=object), groups, first_data_row)
 
 
 def make_holdout_split(settings: Settings, force: bool = False) -> SplitResult:
@@ -287,12 +298,13 @@ def make_holdout_split(settings: Settings, force: bool = False) -> SplitResult:
     holdout_ids = data.frame[ROW_ID].to_numpy()[selection.holdout_idx]
     if not force:
         _refuse_changed_split(settings.paths, holdout_ids)
+        _refuse_changed_inputs(settings.paths)
     splits_dir, holdout_dir = settings.paths.splits, settings.paths.holdout
     splits_dir.mkdir(parents=True, exist_ok=True)
     holdout_dir.mkdir(parents=True, exist_ok=True)
     ids_path = splits_dir / HOLDOUT_IDS_FILE
     _write_csv(pd.DataFrame({ROW_ID: holdout_ids}), ids_path)
-    _write_holdout_files(settings, data.raw, holdout_ids)
+    _write_holdout_files(settings, data.raw_rows(np.sort(holdout_ids)))
     manifest = _build_manifest(settings, data, selection, ids_path)
     _write_json(splits_dir / MANIFEST_FILE, manifest)
     return SplitResult(np.sort(train_ids), np.sort(holdout_ids), manifest)
@@ -312,13 +324,33 @@ def _refuse_changed_split(paths: Paths, holdout_ids: np.ndarray) -> None:
         )
 
 
+def _refuse_changed_inputs(paths: Paths) -> None:
+    """Refuse to re-bless a split when the raw file or sklearn changed since it was made."""
+    manifest_path = paths.splits / MANIFEST_FILE
+    if not manifest_path.exists():
+        return
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    changes = []
+    if sha256_file(paths.raw_data) != manifest["raw_data_sha256"]:
+        changes.append("the raw data file")
+    if manifest.get("sklearn_version") != sklearn.__version__:
+        changes.append(f"scikit-learn ({manifest.get('sklearn_version')} to {sklearn.__version__})")
+    if changes:
+        raise ConfigError(
+            "The persisted split was made before a change to "
+            + " and ".join(changes)
+            + ". Keep the original files, or rerun with --force and retrain every model.",
+            code="SPLIT_WOULD_CHANGE",
+        )
+
+
 def _write_csv(frame: pd.DataFrame, path: Path) -> None:
     frame.to_csv(path, index=False, encoding="utf-8", lineterminator="\n")
 
 
-def _write_holdout_files(settings: Settings, raw: pd.DataFrame, holdout_ids: np.ndarray) -> None:
+def _write_holdout_files(settings: Settings, held_rows: pd.DataFrame) -> None:
     """Write holdout features with original raw values, so uploads exercise full validation."""
-    held = raw.iloc[np.sort(holdout_ids)].reset_index(drop=True)
+    held = held_rows.reset_index(drop=True)
     features = held[list(INPUT_COLUMNS)].copy()
     features[COL_INVOICE] = features[COL_INVOICE].map(_invoice_text)
     holdout_dir = settings.paths.holdout
@@ -463,9 +495,27 @@ def load_training_frame(settings: Settings) -> TrainingData:
             code="SPLIT_ROWS_MISMATCH",
         )
     keep = ~np.isin(data.frame[ROW_ID].to_numpy(), split.holdout_ids)
-    frame = data.frame.loc[keep].reset_index(drop=True)
-    raw = data.raw.iloc[frame[ROW_ID].to_numpy()].drop(columns=[LABEL_COLUMN])
+    frame = data.frame.loc[keep].drop(columns=[LABEL_COLUMN]).reset_index(drop=True)
+    raw = data.raw_rows(frame[ROW_ID].to_numpy()).drop(columns=[LABEL_COLUMN])
     return TrainingData(frame, data.y[keep], data.groups[keep], raw.reset_index(drop=True))
+
+
+def load_full_file_structure(settings: Settings) -> tuple[pd.DataFrame, pd.Series]:
+    """Return the full raw file for label-free structure reports, plus raw label spellings.
+
+    The only full-file view outside this module (docs/03 Phase 2 step 1,
+    DECISIONS.md D26): the schema audit and Col2 formats are label-free, and
+    the raw label mapping reports spellings and counts only.
+
+    Args:
+        settings: Project settings.
+
+    Returns:
+        Tuple of (raw cells without the label column, raw label column).
+    """
+    data = load_labeled_raw(settings.paths, settings.limits)
+    raw = data.raw.reset_index(drop=True)
+    return raw.drop(columns=[LABEL_COLUMN]), raw[LABEL_COLUMN]
 
 
 class HoldoutAccessToken:

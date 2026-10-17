@@ -74,10 +74,20 @@ def _cmd_eda(args: argparse.Namespace, settings: Settings) -> int:
     return EXIT_OK
 
 
+def _cmd_benchmark(args: argparse.Namespace, settings: Settings) -> int:
+    from ledgerclf.benchmark import run_benchmark
+
+    written = run_benchmark(settings, quick=args.quick)
+    mode = "quick" if args.quick else "full"
+    echo(f"Wrote {len(written)} benchmark reports to reports/benchmark/ ({mode} run).")
+    return EXIT_OK
+
+
 COMMANDS: dict[str, tuple[str, Handler]] = {
     "doctor": ("environment and artifact health check", _cmd_doctor),
     "split": ("label cleanup, group key, holdout seed rule, holdout files", _cmd_split),
     "eda": ("EDA and preprocessing reports on the training portion", _cmd_eda),
+    "benchmark": ("leaderboard, ablations, validation schemes", _cmd_benchmark),
 }
 
 
@@ -99,6 +109,8 @@ def _add_arguments(name: str, sub: argparse.ArgumentParser) -> None:
         sub.add_argument(
             "--require-model", action="store_true", help="fail when trained artifacts are missing"
         )
+    if name in ("benchmark", "tune"):
+        sub.add_argument("--quick", action="store_true", help="reduced budget for development")
     if name == "split":
         sub.add_argument(
             "--force", action="store_true", help="replace an existing split even if it changes"

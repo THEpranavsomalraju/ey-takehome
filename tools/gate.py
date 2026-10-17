@@ -37,16 +37,21 @@ HOLDOUT_SENSITIVE = (
     "HoldoutAccessToken",
     "_issuer_key",
     "load_labeled_raw",
-    "paths.raw_data",
+    "LabeledFrame",
+    "load_full_file_structure",
+    ".raw_data",
+    "Challenge_Data",
 )
-# eda.py reads the raw file for the label-free schema audit and the raw label mapping,
-# both sanctioned on the full file (docs/03 Phase 2 step 1, DECISIONS.md D26).
-HOLDOUT_ALLOWED = (
-    "ledgerclf/splitting.py",
-    "ledgerclf/cli.py",
-    "ledgerclf/holdout_eval.py",
-    "ledgerclf/eda.py",
-)
+# eda.py may call load_full_file_structure for the label-free schema audit and the raw
+# label mapping, both sanctioned on the full file (docs/03 Phase 2, DECISIONS.md D26).
+# config.py only defines the raw file path.
+HOLDOUT_ALLOWED: dict[str, tuple[str, ...]] = {
+    "ledgerclf/splitting.py": HOLDOUT_SENSITIVE,
+    "ledgerclf/cli.py": HOLDOUT_SENSITIVE,
+    "ledgerclf/holdout_eval.py": HOLDOUT_SENSITIVE,
+    "ledgerclf/config.py": ("Challenge_Data",),
+    "ledgerclf/eda.py": ("load_full_file_structure",),
+}
 SCANNED_DIRS = ("ledgerclf", "tools", "notebooks", "research", "dashboard")
 
 
@@ -262,10 +267,11 @@ def check_holdout_guard() -> Outcome:
     offenders = []
     for path in [*_python_files(), *sorted((ROOT / "notebooks").glob("*.ipynb"))]:
         relative = path.relative_to(ROOT).as_posix()
-        if relative in HOLDOUT_ALLOWED or relative == "tools/gate.py":
+        if relative == "tools/gate.py":
             continue
         text = path.read_text(encoding="utf-8")
-        hits = [token for token in HOLDOUT_SENSITIVE if token in text]
+        allowed = HOLDOUT_ALLOWED.get(relative, ())
+        hits = [token for token in HOLDOUT_SENSITIVE if token in text and token not in allowed]
         if hits:
             offenders.append(f"{relative}: {', '.join(hits)}")
     if offenders:

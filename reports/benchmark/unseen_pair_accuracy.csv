@@ -1,0 +1,7 @@
+model,pair,rows,accuracy
+logistic_p0,seen pair,4703,0.9566234318520094
+logistic_p0,unseen pair,606,0.8927392739273927
+logodds_blend_p0,seen pair,4703,0.9561981713799702
+logodds_blend_p0,unseen pair,606,0.9141914191419142
+logistic_p1,seen pair,4703,0.9532213480756964
+logistic_p1,unseen pair,606,0.8927392739273927

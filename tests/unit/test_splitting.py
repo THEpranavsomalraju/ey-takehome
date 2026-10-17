@@ -231,3 +231,32 @@ def test_unmapped_training_label_stops_the_split(tmp_path, settings):
         make_holdout_split(Settings(paths=paths))
     assert caught.value.code == "UNMAPPED_TRAINING_LABEL"
     assert "Category_9" in caught.value.message
+
+
+def test_split_refuses_a_raw_file_changed_outside_the_group_key(tmp_path, settings):
+    from ledgerclf.splitting import make_holdout_split
+
+    copy = _copy_project(tmp_path, settings)
+    raw = pd.read_excel(copy.paths.raw_data, engine="xlrd", dtype=object)
+    raw.loc[0, "Col2"] = "EDITED-INVOICE"
+    from tests.conftest import xlsx_bytes
+
+    copy.paths.raw_data.write_bytes(xlsx_bytes({"data": raw}))
+    with pytest.raises(ConfigError) as caught:
+        make_holdout_split(copy)
+    assert caught.value.code == "SPLIT_WOULD_CHANGE"
+    assert "raw data file" in caught.value.message
+
+
+def test_raw_cells_are_looked_up_by_spreadsheet_row(labeled_raw):
+    ids = np.array([5, 0, 42])
+    rows = labeled_raw.raw_rows(ids)
+    assert rows["source_row"].tolist() == [7, 2, 44]
+    by_frame = labeled_raw.frame.set_index(ROW_ID).loc[ids, "Col1"].tolist()
+    assert rows["Col1"].tolist() == by_frame
+
+
+def test_training_frame_carries_no_label_column(training):
+    assert LABEL_COLUMN not in training.frame.columns
+    assert LABEL_COLUMN not in training.raw.columns
+    assert (training.raw["source_row"].to_numpy() == training.frame["source_row"].to_numpy()).all()

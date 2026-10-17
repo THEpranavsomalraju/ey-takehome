@@ -171,6 +171,32 @@ class ExplainParams:
 
 
 @dataclass(frozen=True)
+class BenchmarkParams:
+    """Benchmark and validation-scheme settings (docs/04 section 4)."""
+
+    svc_C: float = 1.0  # noqa: N815 - sklearn parameter name
+    svc_power: float = 0.5
+    nb_alpha: float = 0.1
+    leaf20_tree: TreeParams = field(
+        default_factory=lambda: TreeParams(
+            n_estimators=300,
+            num_leaves=31,
+            max_depth=-1,
+            min_child_samples=20,
+            reg_lambda=0.0,
+            colsample_bytree=1.0,
+            subsample=1.0,
+            subsample_freq=0,
+        )
+    )
+    dial_powers: tuple[float, ...] = (0.0, 0.25, 0.5, 0.75, 1.0)
+    leaf_sizes: tuple[int, ...] = (1, 2, 5, 10, 20)
+    quick_dial_powers: tuple[float, ...] = (0.0, 0.5, 1.0)
+    quick_leaf_sizes: tuple[int, ...] = (2, 20)
+    cv_jobs: int = 5
+
+
+@dataclass(frozen=True)
 class Settings:
     """Complete configuration bundle passed explicitly to modules."""
 
@@ -184,6 +210,7 @@ class Settings:
     decision_rule: DecisionRule = field(default_factory=DecisionRule)
     calibration: CalibrationParams = field(default_factory=CalibrationParams)
     explain: ExplainParams = field(default_factory=ExplainParams)
+    benchmark: BenchmarkParams = field(default_factory=BenchmarkParams)
     seeds: tuple[int, ...] = (0, 1, 2)
     random_state: int = 0
     cv_folds: int = 5

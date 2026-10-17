@@ -1,0 +1,21 @@
+{
+  "source": "docs/01_DATA_FINDINGS.md section 15 (exploration on the full file; the build runs on the 90% training portion)",
+  "ranges": [
+    {"name": "majority baseline accuracy", "report": "benchmark/leaderboard.csv", "row": {"model": "dummy_majority"}, "column": "accuracy_mean", "reference": 0.884, "tolerance": 0.005},
+    {"name": "lookup baseline accuracy", "report": "benchmark/leaderboard.csv", "row": {"model": "lookup_vendor_account"}, "column": "accuracy_mean", "reference": 0.930, "tolerance": 0.01},
+    {"name": "logistic power 0 grouped CV accuracy", "report": "benchmark/leaderboard.csv", "row": {"model": "logistic_p0"}, "column": "accuracy_mean", "reference": 0.951, "tolerance": 0.01},
+    {"name": "blend power 0 grouped CV accuracy", "report": "benchmark/leaderboard.csv", "row": {"model": "logodds_blend_p0"}, "column": "accuracy_mean", "reference": 0.956, "tolerance": 0.01},
+    {"name": "blend power 0 out-of-time accuracy", "report": "benchmark/validation_schemes.csv", "row": {"model": "logodds_blend_p0", "scheme": "out-of-time (train <= 2018-09)"}, "column": "accuracy", "reference": 0.942, "tolerance": 0.015},
+    {"name": "unseen-vendor CV accuracy (balanced logistic, as in exploration Exp 7)", "report": "benchmark/validation_schemes.csv", "row": {"model": "logistic_p1", "scheme": "unseen-vendor CV"}, "column": "accuracy", "reference": 0.891, "tolerance": 0.02},
+    {"name": "majority baseline macro_f1_5", "report": "benchmark/leaderboard.csv", "row": {"model": "dummy_majority"}, "column": "macro_f1_5_mean", "reference": 0.1877, "tolerance": 0.05},
+    {"name": "lookup baseline macro_f1_5", "report": "benchmark/leaderboard.csv", "row": {"model": "lookup_vendor_account"}, "column": "macro_f1_5_mean", "reference": 0.5976, "tolerance": 0.05},
+    {"name": "logistic power 0 macro_f1_5 (Exp 9)", "report": "benchmark/leaderboard.csv", "row": {"model": "logistic_p0"}, "column": "macro_f1_5_mean", "reference": 0.7204, "tolerance": 0.05},
+    {"name": "logistic power 0.5 macro_f1_5 (Exp 9)", "report": "benchmark/leaderboard.csv", "row": {"model": "logistic_p05"}, "column": "macro_f1_5_mean", "reference": 0.7444, "tolerance": 0.05},
+    {"name": "probability blend power 0 macro_f1_5 (Exp 11)", "report": "benchmark/leaderboard.csv", "row": {"model": "probability_blend_p0"}, "column": "macro_f1_5_mean", "reference": 0.7345, "tolerance": 0.05}
+  ],
+  "directions": [
+    {"name": "random-split accuracy exceeds grouped accuracy (leakage demonstration)", "report": "benchmark/validation_schemes.csv", "greater": {"model": "logistic_p0", "scheme": "random CV (leakage demo)"}, "lesser": {"model": "logistic_p0", "scheme": "grouped CV (primary)"}, "column": "accuracy"},
+    {"name": "LightGBM min_child_samples 2 beats 20 on macro_f1_5", "report": "benchmark/leaf_size_effect.csv", "greater": {"min_child_samples": 2}, "lesser": {"min_child_samples": 20}, "column": "macro_f1_5_mean"},
+    {"name": "higher class weight power raises out-of-time false rare alarms (logistic)", "report": "benchmark/class_weight_dial.csv", "greater": {"model": "logistic", "power": 1.0}, "lesser": {"model": "logistic", "power": 0.0}, "column": "oot_majority_rows_predicted_rare"}
+  ]
+}
