@@ -60,6 +60,14 @@ python -m ledgerclf explain data/holdout/holdout_features.xlsx --row 1
 
 The API documentation is at http://127.0.0.1:8000/docs while the server runs.
 
+## The dashboard
+
+- **Data & Model** is the story, section by section: category balance, when categories occur, which inputs carry the label, why testing is grouped, the model comparison, what each input is worth, class weights, calibration, an interactive review-threshold explorer, warning reliability, the holdout result, and the feature pipeline. Every chart has a control to switch what it shows and a one-line takeaway.
+- **Classify & Explain** takes any Excel or CSV upload (or the holdout sample). It shows validation messages, accuracy if the file has labels, and charts that filter the table when clicked. The table can be searched, filtered, and sorted, with 25 rows per page. Clicking a row opens its explanation: what drove the prediction (exact contributions), the probability of each category, evidence from past invoices, warnings, an on-demand AI explanation, and a **What if?** box that re-scores the row with one input changed.
+- The header shows the active model (click for details and an environment check), the agent route, and settings for an optional personal API key.
+
+The built dashboard ships in `frontend/dist`, so no Node.js is needed. To change and rebuild it: `cd frontend`, `npm ci`, `npm run build` (Node 20 or newer).
+
 ## How it works
 
 1. **Validation.** Any Excel (.xlsx, .xls) or CSV file is read: odd encodings, delimiters, title rows above the header, shuffled or renamed columns, currency strings, European numbers, and mixed date formats are all handled. Problems become clear warnings, and **every non-empty row gets a prediction**.
@@ -135,7 +143,7 @@ ledgerclf/        the Python package
   service, server                  the facade used by the dashboard, and the HTTP API
   agent, agent_tools               the Claude explanation agent and its read-only tools
   cli                              python -m ledgerclf ...
-frontend/         the dashboard (built files in frontend/dist are served by `serve`)
+frontend/         the dashboard: React + shadcn/ui source, built files in frontend/dist
 notebooks/        01 exploration, 02 preprocessing, 03 modeling
 data/raw/         Challenge_Data.xls (original, never modified)
 data/splits/      holdout row ids and the split record

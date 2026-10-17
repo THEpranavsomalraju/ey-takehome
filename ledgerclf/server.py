@@ -25,11 +25,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from ledgerclf import __version__
 from ledgerclf.agent import explain_with_agent, resolve_connection
-from ledgerclf.config import HOLDOUT_FEATURES_STEM, ServerParams
+from ledgerclf.agent_tools import ToolContext, run_tool
+from ledgerclf.config import HOLDOUT_FEATURES_STEM
 from ledgerclf.exceptions import ArtifactError, ConfigError, LedgerClfError
 from ledgerclf.jsonsafe import to_jsonable
 from ledgerclf.predict import PredictionResult
 from ledgerclf.service import PredictionService
+from ledgerclf.table_views import RowQuery, SortOrder, filtered_rows, insights, page
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,15 @@ class ResultCache:
         return result
 
 
+class WhatIfRequest(BaseModel):
+    """Body of POST /api/whatif: re-score one row with one input changed."""
+
+    upload_id: str
+    row_number: int = Field(ge=1)
+    column: str
+    value: str = Field(max_length=1000)
+
+
 class ExplainRequest(BaseModel):
     """Body of POST /api/explain."""
 
@@ -83,16 +94,6 @@ class ExplainRequest(BaseModel):
     row_number: int = Field(ge=1)
     use_llm: bool = True
     api_key: str | None = None
-
-
-def _page(
-    result: PredictionResult, offset: int, limit: int, params: ServerParams
-) -> dict[str, Any]:
-    limit = max(1, min(limit, params.max_page_rows))
-    offset = max(0, offset)
-    rows = result.predictions.iloc[offset : offset + limit]
-    records: list[dict[str, Any]] = to_jsonable(rows.to_dict(orient="records"))
-    return {"offset": offset, "limit": limit, "total": len(result.predictions), "rows": records}
 
 
 def _sample_path(service: PredictionService) -> Path:
@@ -188,11 +189,15 @@ def _add_info_routes(app: FastAPI, service: PredictionService) -> None:
 def _add_prediction_routes(app: FastAPI, service: PredictionService, cache: ResultCache) -> None:
     params = service.settings.server
 
+    threshold = service.bundle.policy.threshold
+
     def predicted(result: PredictionResult) -> dict[str, Any]:
+        total = len(result.predictions)
         return {
             "upload_id": cache.add(result),
             "summary": result.summary(),
-            "page": _page(result, 0, params.default_page_rows, params),
+            "insights": insights(result, threshold, params.histogram_bins),
+            "page": page(result.predictions, 0, params.default_page_rows, total),
         }
 
     @app.post("/api/predict")
@@ -206,14 +211,35 @@ def _add_prediction_routes(app: FastAPI, service: PredictionService, cache: Resu
         return predicted(service.predict_file(path.read_bytes(), path.name))
 
     @app.get("/api/predict/{upload_id}/rows")
-    def rows(upload_id: str, offset: int = 0, limit: int = params.default_page_rows) -> Any:
-        return _page(cache.get(upload_id), offset, limit, params)
+    def rows(
+        upload_id: str,
+        offset: int = 0,
+        limit: int = params.default_page_rows,
+        q: str = "",
+        label: str | None = None,
+        review: bool = False,
+        flag: str | None = None,
+        sort: SortOrder = "row",
+    ) -> Any:
+        predictions = cache.get(upload_id).predictions
+        query = RowQuery(search=q, label=label, review_only=review, flag=flag, sort=sort)
+        size = max(1, min(limit, params.max_page_rows))
+        return page(filtered_rows(predictions, query), offset, size, len(predictions))
 
     @app.get("/api/predict/{upload_id}/download")
     def download(upload_id: str) -> Response:
         csv = cache.get(upload_id).to_csv().encode("utf-8-sig")
         headers = {"Content-Disposition": 'attachment; filename="predictions.csv"'}
         return Response(content=csv, media_type="text/csv", headers=headers)
+
+    @app.get("/api/explain/{upload_id}/{row_number}")
+    def explanation_payload(upload_id: str, row_number: int) -> dict[str, Any]:
+        return service.explain(cache.get(upload_id), row_number)
+
+    @app.post("/api/whatif")
+    def what_if_route(request: WhatIfRequest) -> dict[str, Any]:
+        context = ToolContext(service, cache.get(request.upload_id), request.row_number)
+        return run_tool(context, "what_if", {"column": request.column, "value": request.value})
 
     @app.post("/api/explain")
     def explain(request: ExplainRequest) -> dict[str, Any]:

@@ -28,6 +28,7 @@ from ledgerclf.agent import (
 )
 from ledgerclf.agent_tools import ToolContext, ToolError, run_tool
 from ledgerclf.config import HOLDOUT_EVALUATION_REPORT, AgentParams, Paths, Settings
+from ledgerclf.schema import INPUT_COLUMNS
 from ledgerclf.server import ResultCache, create_app
 from ledgerclf.service import PredictionService
 
@@ -434,3 +435,60 @@ def test_grounding_allows_a_small_relative_difference_only():
     calls = [{"tool": "x", "input": {}, "output": {"contribution": 0.4894285}}]
     assert ungrounded_numbers("It adds 0.489429.", calls, 1.0, 0.001) == []
     assert ungrounded_numbers("It adds 0.4912.", calls, 1.0, 0.001) == ["0.4912"]
+
+
+@pytest.fixture(scope="module")
+def holdout_upload(api, holdout_xlsx):
+    response = api.post("/api/predict", files={"file": ("holdout_features.xlsx", holdout_xlsx)})
+    return response.json()
+
+
+def test_api_insights_add_up_to_the_upload(holdout_upload):
+    insights = holdout_upload["insights"]
+    histogram = insights["confidence_histogram"]
+    assert len(histogram) == 20
+    assert sum(b["auto"] + b["review"] for b in histogram) == 590
+    assert sum(c["rows"] for c in insights["by_class"]) == 590
+    review = holdout_upload["summary"]["review_required"]
+    assert sum(b["review"] for b in histogram) == review
+    assert 0 < insights["threshold"] < 1
+
+
+def test_api_rows_filter_search_and_sort(api, holdout_upload):
+    upload = holdout_upload["upload_id"]
+    url = f"/api/predict/{upload}/rows"
+    review = api.get(url, params={"review": True, "limit": 500}).json()
+    assert review["matched"] == holdout_upload["summary"]["review_required"]
+    assert all(r["review_required"] for r in review["rows"])
+    label = api.get(url, params={"label": "Category_2", "limit": 500}).json()
+    assert label["rows"] and all(r["predicted_label"] == "Category_2" for r in label["rows"])
+    ascending = api.get(url, params={"sort": "confidence_asc", "limit": 500}).json()["rows"]
+    confidences = [r["confidence"] for r in ascending]
+    assert confidences == sorted(confidences)
+    first = ascending[0]
+    searched = api.get(url, params={"q": first["Col1"].upper()}).json()
+    assert searched["matched"] >= 1 and all(
+        first["Col1"].lower() in " ".join(str(r[c]) for c in INPUT_COLUMNS).lower()
+        for r in searched["rows"]
+    )
+    flagged = api.get(url, params={"flag": "LOW_CONFIDENCE", "limit": 500}).json()
+    assert all("LOW_CONFIDENCE" in r["flags"].split("|") for r in flagged["rows"])
+    assert api.get(url, params={"sort": "sideways"}).status_code == 422
+
+
+def test_api_explanation_payload_and_what_if(api, holdout_upload):
+    upload = holdout_upload["upload_id"]
+    payload = api.get(f"/api/explain/{upload}/3").json()
+    assert payload["row_number"] == 3 and payload["fallback_text"].startswith("**Summary:**")
+    changed = api.post(
+        "/api/whatif",
+        json={"upload_id": upload, "row_number": 3, "column": "Col3", "value": "1680"},
+    ).json()
+    assert changed["changed"] == {"column": "Col3", "value": "1680"}
+    assert abs(sum(changed["new_probabilities"].values()) - 1) < 1e-3
+    bad = api.post(
+        "/api/whatif",
+        json={"upload_id": upload, "row_number": 3, "column": "Col2", "value": "x"},
+    )
+    assert bad.status_code == 422 and bad.json()["code"] == "AGENT_TOOL_ERROR"
+    assert api.get(f"/api/explain/{upload}/9999").status_code == 422

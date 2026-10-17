@@ -1,0 +1,103 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-support: var(--support);
+  --color-against: var(--against);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+/* Dark only. Flat surfaces, hairline borders; yellow is reserved for primary actions and focus. */
+:root {
+  color-scheme: dark;
+  --radius: 0.5rem;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.178 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: #ffe600;
+  --primary-foreground: #161616;
+  --secondary: oklch(0.24 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.235 0 0);
+  --muted-foreground: oklch(0.71 0 0);
+  --accent: oklch(0.25 0 0);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 14%);
+  --ring: oklch(0.92 0.19 103 / 55%);
+  /* Category colors: validated for the dark surface (contrast >= 3:1, CVD-separated). */
+  --chart-1: #3987e5;
+  --chart-2: #d95926;
+  --chart-3: #199e70;
+  --chart-4: #c98500;
+  --chart-5: #d55181;
+  --chart-6: #008300;
+  --support: #3987e5;
+  --against: #e66767;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --grid: oklch(1 0 0 / 7%);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}

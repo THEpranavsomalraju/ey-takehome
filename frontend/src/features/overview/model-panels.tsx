@@ -1,0 +1,332 @@
+import { useMemo, useState } from "react"
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
+
+import { ChartSkeleton, LoadError, Panel, Segmented } from "@/components/blocks"
+import { DotPlot } from "@/components/dot-plot"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import { CLASSES, pct, signed } from "@/lib/domain"
+import { asNumber, useTable } from "@/lib/reports"
+
+const MODEL_LABELS: Record<string, string> = {
+  dummy_majority: "Always Category_1",
+  lookup_vendor_account: "Vendor + account lookup",
+  complement_nb: "Complement naive Bayes",
+  linear_svc: "Linear SVM",
+  logistic_p0: "Logistic regression",
+  logistic_p05: "Logistic, class weights 0.5",
+  logistic_p1: "Logistic, balanced weights",
+  lightgbm_p0: "LightGBM",
+  lightgbm_leaf20: "LightGBM, min leaf 20",
+  probability_blend_p0: "Probability-average blend",
+  logodds_blend_p0: "Log-odds blend, unweighted",
+  logodds_blend_p025: "Log-odds blend, weights 0.25",
+}
+const FINAL_MODEL = "logodds_blend_p025"
+const modelLabel = (key: string) => MODEL_LABELS[key] ?? key
+
+type SchemeRow = { model: string; scheme: string; accuracy: number; macro_f1_5: number }
+const SCHEME_LABELS: Record<string, string> = {
+  "random CV (leakage demo)": "Random split (leaky)",
+  "grouped CV (primary)": "Grouped CV (used)",
+  "out-of-time (train <= 2018-09)": "Out-of-time",
+  "unseen-vendor CV": "New vendors only",
+}
+
+export function ValidationPanel() {
+  const { data, error } = useTable<SchemeRow>("benchmark/validation_schemes.csv")
+  const [model, setModel] = useState("logistic_p0")
+  const items = useMemo(
+    () =>
+      (data?.rows ?? [])
+        .filter((r) => r.model === model)
+        .map((r) => ({
+          key: r.scheme,
+          label: SCHEME_LABELS[r.scheme] ?? r.scheme,
+          value: asNumber(r.accuracy),
+          highlight: r.scheme.startsWith("grouped"),
+          detail: `${SCHEME_LABELS[r.scheme] ?? r.scheme}: accuracy ${pct(asNumber(r.accuracy))}, macro F1 ${asNumber(r.macro_f1_5).toFixed(3)}`,
+        })),
+    [data, model],
+  )
+  return (
+    <Panel
+      title="How the score depends on the test design"
+      description="Accuracy of the same model under four ways of holding out test rows."
+      action={
+        <Select value={model} onValueChange={setModel}>
+          <SelectTrigger size="sm" className="w-48 text-xs" aria-label="Model">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {["logistic_p0", "logodds_blend_p0", "logistic_p1"].map((m) => (
+              <SelectItem key={m} value={m} className="text-xs">
+                {modelLabel(m)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      }
+      takeaway="A random split puts exact copies of test rows into training and inflates accuracy by about 1.4 points. Every score in this dashboard uses grouped folds instead. New vendors are the hardest case, which is why they are flagged for review."
+    >
+      {error && <LoadError error={error} />}
+      {!data ? <ChartSkeleton height={160} /> : <DotPlot items={items} domain={[0.86, 0.98]} format={(v) => pct(v)} tickFormat={(v) => pct(v, 0)} ticks={[0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.98]} />}
+    </Panel>
+  )
+}
+
+type BoardRow = Record<string, number | string> & { model: string }
+type Metric = "accuracy" | "macro_f1_5" | "recall"
+
+export function LeaderboardPanel() {
+  const { data, error } = useTable<BoardRow>("benchmark/leaderboard.csv")
+  const [metric, setMetric] = useState<Metric>("accuracy")
+  const [rareClass, setRareClass] = useState("Category_2")
+  const items = useMemo(() => {
+    const rows = data?.rows ?? []
+    const value = (r: BoardRow) =>
+      metric === "recall" ? asNumber(r[`recall_${rareClass}`]) : asNumber(r[`${metric}_mean`])
+    const std = (r: BoardRow) => (metric === "recall" ? 0 : asNumber(r[`${metric}_std`]))
+    return [...rows]
+      .sort((a, b) => value(b) - value(a))
+      .map((r) => ({
+        key: r.model,
+        label: modelLabel(r.model),
+        value: value(r),
+        low: std(r) ? value(r) - std(r) : undefined,
+        high: std(r) ? value(r) + std(r) : undefined,
+        highlight: r.model === FINAL_MODEL,
+        detail:
+          metric === "recall"
+            ? `${modelLabel(r.model)}: finds ${pct(value(r))} of ${rareClass} rows`
+            : `${modelLabel(r.model)}: ${pct(value(r))} ± ${pct(std(r))} over 3 seeds × 5 folds`,
+      }))
+  }, [data, metric, rareClass])
+  const domain: [number, number] = metric === "accuracy" ? [0.86, 0.98] : [0, 1]
+  return (
+    <Panel
+      title="Model comparison"
+      description="Every model on the same grouped folds (3 seeds × 5 folds). Lines show ±1 standard deviation."
+      action={
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            label="Metric"
+            value={metric}
+            onChange={setMetric}
+            options={[
+              { value: "accuracy", label: "Accuracy" },
+              { value: "macro_f1_5", label: "Macro F1" },
+              { value: "recall", label: "Recall" },
+            ]}
+          />
+          {metric === "recall" && (
+            <Select value={rareClass} onValueChange={setRareClass}>
+              <SelectTrigger size="sm" className="w-32 text-xs" aria-label="Category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CLASSES.map((c) => (
+                  <SelectItem key={c} value={c} className="text-xs">
+                    {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      }
+      takeaway="The log-odds blend of logistic regression and LightGBM (highlighted) leads on accuracy and macro F1. The two members make different mistakes, so combining their scores beats either one alone."
+    >
+      {error && <LoadError error={error} />}
+      {!data ? (
+        <ChartSkeleton height={300} />
+      ) : (
+        <DotPlot
+          items={items}
+          domain={domain}
+          format={(v) => pct(v)}
+          tickFormat={(v) => pct(v, 0)}
+          ticks={metric === "accuracy" ? [0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.98] : [0, 0.25, 0.5, 0.75, 1]}
+          reference={metric === "accuracy" ? { value: 0.8842, label: "always answering Category_1" } : undefined}
+        />
+      )}
+    </Panel>
+  )
+}
+
+const ABLATION_LABELS: Record<string, string> = {
+  "drop col1_tokens": "Vendor words",
+  "drop col1_value": "Whole vendor name",
+  "drop col4_tokens": "Description words",
+  "drop col6_tokens": "GL account words",
+  "drop col6_value": "Whole GL account",
+  "drop pair": "Vendor + account pair",
+  "drop col7": "Document flag",
+  "drop amount": "Amount",
+  "drop amount_flags": "Credit / round flags",
+  "drop period": "Posting month",
+  "add col2 format features": "+ Invoice number format",
+  "add token bigrams": "+ Word pairs",
+}
+
+export function AblationPanel() {
+  const { data, error } = useTable<{ variant: string; delta_accuracy: number; delta_macro_f1_5: number }>(
+    "benchmark/ablation.csv",
+  )
+  const [metric, setMetric] = useState<"delta_accuracy" | "delta_macro_f1_5">("delta_macro_f1_5")
+  const rows = useMemo(
+    () =>
+      (data?.rows ?? [])
+        .filter((r) => r.variant !== "full feature set")
+        .map((r) => ({ name: ABLATION_LABELS[r.variant] ?? r.variant, value: asNumber(r[metric]) }))
+        .sort((a, b) => a.value - b.value),
+    [data, metric],
+  )
+  return (
+    <Panel
+      title="What each input is worth"
+      description="Change in the score when one input group is removed (or added) from the logistic model."
+      action={
+        <Segmented
+          label="Metric"
+          value={metric}
+          onChange={setMetric}
+          options={[
+            { value: "delta_macro_f1_5", label: "Macro F1" },
+            { value: "delta_accuracy", label: "Accuracy" },
+          ]}
+        />
+      }
+      takeaway="Removing the description words or the posting month hurts most, especially for the rare categories. Small gains from removing other groups did not carry over to the final blend, so the full feature set is kept."
+    >
+      {error && <LoadError error={error} />}
+      {!data ? (
+        <ChartSkeleton height={320} />
+      ) : (
+        <ChartContainer config={{ value: { label: "Change", color: "var(--support)" } }} className="h-[320px] w-full">
+          <BarChart data={rows} layout="vertical" margin={{ left: 4, right: 16 }}>
+            <CartesianGrid horizontal={false} stroke="var(--grid)" />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => (metric === "delta_accuracy" ? `${signed(v * 100, 1)}pt` : signed(v, 2))}
+            />
+            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={150} />
+            <ReferenceLine x={0} stroke="var(--muted-foreground)" />
+            <ChartTooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+              content={
+                <ChartTooltipContent
+                  hideIndicator
+                  formatter={(v) => (
+                    <span className="tabular">
+                      {metric === "delta_accuracy"
+                        ? `${signed(asNumber(v) * 100, 2)} accuracy points`
+                        : `${signed(asNumber(v), 3)} macro F1`}
+                    </span>
+                  )}
+                />
+              }
+            />
+            <Bar isAnimationActive={false} dataKey="value" radius={4} barSize={14}>
+              {rows.map((r) => (
+                <Cell key={r.name} fill={r.value < 0 ? "var(--against)" : "var(--support)"} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      )}
+    </Panel>
+  )
+}
+
+type DialRow = {
+  model: string
+  power: number
+  cv_accuracy: number
+  cv_macro_f1_5: number
+  oot_majority_rows_predicted_rare: number
+}
+
+export function ClassWeightPanel() {
+  const { data, error } = useTable<DialRow>("benchmark/class_weight_dial.csv")
+  const [metric, setMetric] = useState<"cv_macro_f1_5" | "cv_accuracy" | "oot_majority_rows_predicted_rare">(
+    "cv_macro_f1_5",
+  )
+  const rows = useMemo(() => {
+    const byPower = new Map<number, Record<string, number>>()
+    for (const r of data?.rows ?? []) {
+      const power = asNumber(r.power)
+      const entry = byPower.get(power) ?? { power }
+      entry[r.model] = asNumber(r[metric])
+      byPower.set(power, entry)
+    }
+    return [...byPower.values()].sort((a, b) => a.power - b.power)
+  }, [data, metric])
+  const percent = metric !== "oot_majority_rows_predicted_rare"
+  return (
+    <Panel
+      title="Class weights: rare-category recall against false alarms"
+      description="Weight per category = (largest class / class size) ^ power. 0 = no weighting, 1 = fully balanced."
+      action={
+        <Segmented
+          label="Metric"
+          value={metric}
+          onChange={setMetric}
+          options={[
+            { value: "cv_macro_f1_5", label: "Macro F1" },
+            { value: "cv_accuracy", label: "Accuracy" },
+            { value: "oot_majority_rows_predicted_rare", label: "False alarms" },
+          ]}
+        />
+      }
+      takeaway="A small power (0.25, dashed line) gets most of the rare-category gain without extra false rare alarms on common invoices. Higher powers trade accuracy for alarms."
+    >
+      {error && <LoadError error={error} />}
+      {!data ? (
+        <ChartSkeleton height={240} />
+      ) : (
+        <ChartContainer
+          config={{
+            logodds_blend: { label: "Log-odds blend", color: "var(--primary)" },
+            logistic: { label: "Logistic regression", color: "var(--muted-foreground)" },
+          }}
+          className="h-[240px] w-full"
+        >
+          <LineChart data={rows} margin={{ left: -8, right: 12, top: 8 }}>
+            <CartesianGrid vertical={false} stroke="var(--grid)" />
+            <XAxis dataKey="power" type="number" domain={[0, 1]} ticks={[0, 0.25, 0.5, 0.75, 1]} tickLine={false} axisLine={false} />
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              domain={["auto", "auto"]}
+              tickFormatter={(v) => (percent ? pct(v, 0) : String(v))}
+              allowDecimals={!percent ? false : true}
+            />
+            <ReferenceLine x={0.25} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(_, payload) => `Power ${payload?.[0]?.payload?.power}`}
+                  formatter={(v, name) => (
+                    <span className="flex w-full justify-between gap-4">
+                      <span className="text-muted-foreground">{name === "logodds_blend" ? "Log-odds blend" : "Logistic"}</span>
+                      <span className="tabular">{percent ? pct(asNumber(v)) : `${v} rows`}</span>
+                    </span>
+                  )}
+                />
+              }
+            />
+            <Line isAnimationActive={false} dataKey="logodds_blend" stroke="var(--color-logodds_blend)" strokeWidth={2} dot={{ r: 4 }} />
+            <Line isAnimationActive={false} dataKey="logistic" stroke="var(--color-logistic)" strokeWidth={2} dot={{ r: 4 }} />
+          </LineChart>
+        </ChartContainer>
+      )}
+      <div className="flex gap-4 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-primary" />Log-odds blend</span>
+        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-muted-foreground" />Logistic regression</span>
+      </div>
+    </Panel>
+  )
+}

@@ -1,0 +1,253 @@
+import { useMemo, useState } from "react"
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts"
+
+import { ChartSkeleton, ClassLegend, LoadError, Panel, Segmented, Stat } from "@/components/blocks"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { CLASSES, CLASS_COLORS, num, pct } from "@/lib/domain"
+import { asNumber, useJson, useTable } from "@/lib/reports"
+
+const classConfig = Object.fromEntries(
+  CLASSES.map((c) => [c, { label: c, color: CLASS_COLORS[c] }]),
+) satisfies ChartConfig
+
+export function ClassDistributionPanel() {
+  const { data, error } = useTable<{ class: string; rows: number; share: number }>(
+    "eda/class_distribution.csv",
+  )
+  const [scale, setScale] = useState<"log" | "linear">("log")
+  return (
+    <Panel
+      title="Category balance"
+      description="Training rows per category (holdout excluded)."
+      action={
+        <Segmented
+          label="Axis scale"
+          value={scale}
+          onChange={setScale}
+          options={[
+            { value: "log", label: "Log" },
+            { value: "linear", label: "Linear" },
+          ]}
+        />
+      }
+      takeaway="88.4% of rows are Category_1, so a model that always answers Category_1 is already 88.4% accurate. Results are therefore also reported as macro F1, which weighs every category equally."
+    >
+      {error && <LoadError error={error} />}
+      {!data ? (
+        <ChartSkeleton height={220} />
+      ) : (
+        <ChartContainer config={classConfig} className="h-[220px] w-full">
+          <BarChart data={data.rows} layout="vertical" margin={{ left: 4, right: 96 }}>
+            <CartesianGrid horizontal={false} stroke="var(--grid)" />
+            <XAxis
+              type="number"
+              scale={scale}
+              domain={scale === "log" ? [1, 10000] : [0, "auto"]}
+              allowDataOverflow
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(v) => num(v)}
+              ticks={scale === "log" ? [1, 10, 100, 1000, 10000] : undefined}
+            />
+            <YAxis
+              type="category"
+              dataKey="class"
+              tickLine={false}
+              axisLine={false}
+              width={84}
+            />
+            <ChartTooltip
+              cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+              content={
+                <ChartTooltipContent
+                  hideIndicator
+                  formatter={(_, __, item) => (
+                    <span className="tabular">
+                      {num(item.payload.rows)} rows ({pct(item.payload.share, 2)})
+                    </span>
+                  )}
+                />
+              }
+            />
+            <Bar isAnimationActive={false} dataKey="rows" radius={[0, 4, 4, 0]} barSize={18}>
+              {data.rows.map((row) => (
+                <Cell key={row.class} fill={CLASS_COLORS[row.class]} />
+              ))}
+              <LabelList
+                dataKey="rows"
+                position="right"
+                className="fill-muted-foreground text-[11px]"
+                formatter={(v: unknown) => num(asNumber(v))}
+              />
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      )}
+    </Panel>
+  )
+}
+
+type PeriodRow = Record<string, string | number> & { period: string }
+
+export function MonthlyVolumePanel() {
+  const { data, error } = useTable<PeriodRow>("eda/period_by_class.csv")
+  const [view, setView] = useState<"all" | "rare">("rare")
+  const shown = view === "all" ? CLASSES : CLASSES.slice(2)
+  const rows = useMemo(
+    () => data?.rows.filter((r) => shown.some((c) => asNumber(r[c]) > 0)) ?? [],
+    [data, shown],
+  )
+  return (
+    <Panel
+      title="When each category occurs"
+      description="Training rows per posting month."
+      action={
+        <Segmented
+          label="Categories shown"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "rare", label: "Rare only" },
+            { value: "all", label: "All" },
+          ]}
+        />
+      }
+      takeaway="The rare categories cluster in particular months: Category_3 from 2018-05, Category_4 around year end, both Category_5 rows in 2018-10. That is why the posting month is a model input and why an out-of-time test is part of validation."
+    >
+      {error && <LoadError error={error} />}
+      {!data ? (
+        <ChartSkeleton height={220} />
+      ) : (
+        <>
+          <ChartContainer config={classConfig} className="h-[220px] w-full">
+            <BarChart data={rows} margin={{ left: -16 }}>
+              <CartesianGrid vertical={false} stroke="var(--grid)" />
+              <XAxis dataKey="period" tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={16} />
+              <YAxis tickLine={false} axisLine={false} allowDecimals={false} />
+              <ChartTooltip cursor={{ fill: "var(--muted)", opacity: 0.4 }} content={<ChartTooltipContent />} />
+              {shown.map((c, i) => (
+                <Bar isAnimationActive={false}
+                  key={c}
+                  dataKey={c}
+                  stackId="month"
+                  fill={CLASS_COLORS[c]}
+                  stroke="var(--card)"
+                  strokeWidth={1}
+                  radius={i === shown.length - 1 ? [3, 3, 0, 0] : 0}
+                />
+              ))}
+            </BarChart>
+          </ChartContainer>
+          <ClassLegend classes={shown} />
+        </>
+      )}
+    </Panel>
+  )
+}
+
+type InfoRow = { variable: string; mutual_information_nats: number; normalized_mutual_information: number }
+type CramerRow = Record<string, string | number> & { variable: string }
+
+export function SignalPanel() {
+  const info = useTable<InfoRow>("eda/mutual_information.csv")
+  const cramer = useTable<CramerRow>("eda/cramers_v.csv")
+  const [measure, setMeasure] = useState<"cramer" | "mi">("cramer")
+  const rows = useMemo(() => {
+    if (measure === "mi") {
+      return (info.data?.rows ?? []).map((r) => ({ name: r.variable, value: asNumber(r.mutual_information_nats) }))
+    }
+    return (cramer.data?.rows ?? [])
+      .filter((r) => r.variable !== "label")
+      .map((r) => ({ name: r.variable, value: asNumber(r.label) }))
+      .sort((a, b) => b.value - a.value)
+  }, [measure, info.data, cramer.data])
+  const loading = !info.data || !cramer.data
+  return (
+    <Panel
+      title="Which inputs carry the label"
+      description={
+        measure === "cramer"
+          ? "Cramer's V with the label: 0 = no association, 1 = the input decides the label."
+          : "Mutual information with the label, in nats (higher = more information)."
+      }
+      action={
+        <Segmented
+          label="Association measure"
+          value={measure}
+          onChange={setMeasure}
+          options={[
+            { value: "cramer", label: "Cramer's V" },
+            { value: "mi", label: "Mutual info" },
+          ]}
+        />
+      }
+      takeaway="Vendor, GL account, and their combination are strongly tied to the category; the description carries the most information overall. Amount and month are weak on their own but separate the rare categories."
+    >
+      {(info.error || cramer.error) && <LoadError error={(info.error ?? cramer.error) as Error} />}
+      {loading ? (
+        <ChartSkeleton height={220} />
+      ) : (
+        <ChartContainer config={{ value: { label: measure === "cramer" ? "Cramer's V" : "Nats", color: "var(--chart-1)" } }} className="h-[220px] w-full">
+          <BarChart data={rows} layout="vertical" margin={{ left: 4, right: 48 }}>
+            <CartesianGrid horizontal={false} stroke="var(--grid)" />
+            <XAxis type="number" domain={[0, measure === "cramer" ? 1 : "auto"]} tickLine={false} axisLine={false} />
+            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={124} />
+            <ChartTooltip cursor={{ fill: "var(--muted)", opacity: 0.4 }} content={<ChartTooltipContent hideIndicator />} />
+            <Bar isAnimationActive={false} dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} barSize={16}>
+              <LabelList
+                dataKey="value"
+                position="right"
+                className="fill-muted-foreground text-[11px]"
+                formatter={(v: unknown) => asNumber(v).toFixed(2)}
+              />
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      )}
+    </Panel>
+  )
+}
+
+interface Duplicates {
+  rows: number
+  duplicate_rows_group_key: number
+  groups: number
+  groups_with_copies: number
+  label_conflict_groups: number
+}
+
+export function DuplicateStats() {
+  const dup = useJson<Duplicates>("eda/duplicates_summary.json")
+  const ceiling = useJson<{ text_amount_doc: { ceiling_accuracy: number } }>("eda/accuracy_ceiling.json")
+  if (dup.error) return <LoadError error={dup.error} />
+  if (!dup.data || !ceiling.data) return <ChartSkeleton height={96} />
+  const d = dup.data
+  return (
+    <div className="grid flex-1 grid-cols-2 gap-3">
+      <Stat
+        label="Rows with an exact copy"
+        value={pct(d.duplicate_rows_group_key / d.rows, 0)}
+        detail={`${num(d.duplicate_rows_group_key)} of ${num(d.rows)} training rows`}
+        hint="Rows identical on every model input except the invoice number. A random split would test the model on copies of training rows."
+      />
+      <Stat
+        label="Duplicate groups"
+        value={num(d.groups)}
+        detail={`${num(d.groups_with_copies)} contain copies`}
+        hint="Grouped cross-validation keeps every group on one side of each split."
+      />
+      <Stat
+        label="Groups with conflicting labels"
+        value={num(d.label_conflict_groups)}
+        detail="The labels are consistent"
+      />
+      <Stat
+        label="Best possible accuracy"
+        value={pct(ceiling.data.text_amount_doc.ceiling_accuracy, 2)}
+        detail="If every repeated pattern were memorized"
+        hint="Upper bound from rows that agree on vendor, description, account, amount, and document flag."
+      />
+    </div>
+  )
+}
+

@@ -298,6 +298,7 @@ class ServerParams:
     cached_uploads: int = 20  # recent results kept in memory for explanations
     default_page_rows: int = 25
     max_page_rows: int = 500
+    histogram_bins: int = 20  # confidence histogram of an upload, 0 to 1
     browser_delay_seconds: float = 1.5  # wait for the server before opening the browser
 
 

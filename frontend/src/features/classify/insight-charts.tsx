@@ -1,0 +1,158 @@
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, ReferenceLine, XAxis, YAxis } from "recharts"
+
+import { Panel } from "@/components/blocks"
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
+import type { Insights } from "@/lib/api"
+import { CLASS_COLORS, flagLabel, num, pct } from "@/lib/domain"
+
+const clickHint = "Click a bar to filter the table; click again to clear."
+
+export function PredictedClassesChart({
+  insights,
+  selected,
+  onSelect,
+}: {
+  insights: Insights
+  selected: string | null
+  onSelect: (label: string | null) => void
+}) {
+  const data = insights.by_class.filter((r) => r.rows > 0)
+  return (
+    <Panel title="Predicted categories" description={clickHint}>
+      <ChartContainer config={{ rows: { label: "Rows" } }} className="h-[200px] w-full">
+        <BarChart data={data} layout="vertical" margin={{ left: 4, right: 56 }}>
+          <CartesianGrid horizontal={false} stroke="var(--grid)" />
+          <XAxis type="number" tickLine={false} axisLine={false} hide />
+          <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={84} />
+          <ChartTooltip
+            cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+            content={
+              <ChartTooltipContent
+                hideIndicator
+                formatter={(_, __, item) => (
+                  <span className="tabular">
+                    {num(item.payload.rows)} rows, {num(item.payload.review)} need review
+                  </span>
+                )}
+              />
+            }
+          />
+          <Bar isAnimationActive={false}
+            dataKey="rows"
+            radius={[0, 4, 4, 0]}
+            barSize={18}
+            className="cursor-pointer"
+            onClick={(d: { payload?: { label: string } }) => {
+              const label = d.payload?.label ?? null
+              onSelect(label === selected ? null : label)
+            }}
+          >
+            {data.map((r) => (
+              <Cell
+                key={r.label}
+                fill={CLASS_COLORS[r.label]}
+                fillOpacity={selected && selected !== r.label ? 0.3 : 1}
+              />
+            ))}
+            <LabelList dataKey="rows" position="right" className="fill-muted-foreground text-[11px]" formatter={(v: unknown) => num(Number(v))} />
+          </Bar>
+        </BarChart>
+      </ChartContainer>
+    </Panel>
+  )
+}
+
+export function ConfidenceChart({ insights }: { insights: Insights }) {
+  const data = insights.confidence_histogram
+    .filter((b) => b.high > 0.15)
+    .map((b) => ({ ...b, bin: b.low + (b.high - b.low) / 2 }))
+  return (
+    <Panel
+      title="How confident the model is"
+      description={`Rows per confidence level (square-root scale). Below ${pct(insights.threshold, 0)} (dashed line) a row always goes to review; warnings can send confident rows too.`}
+    >
+      <ChartContainer
+        config={{
+          auto: { label: "Decided automatically", color: "var(--chart-1)" },
+          review: { label: "Needs review", color: "var(--warning)" },
+        }}
+        className="h-[200px] w-full"
+      >
+        <BarChart data={data} margin={{ left: -16, right: 8 }} barCategoryGap={1}>
+          <CartesianGrid vertical={false} stroke="var(--grid)" />
+          <XAxis
+            dataKey="bin"
+            type="number"
+            domain={[0.15, 1]}
+            ticks={[0.2, 0.4, 0.6, 0.8, 1]}
+            tickFormatter={(v) => pct(v, 0)}
+            tickLine={false}
+            axisLine={false}
+          />
+          <YAxis tickLine={false} axisLine={false} scale="sqrt" allowDecimals={false} />
+          <ReferenceLine x={insights.threshold} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
+          <ChartTooltip
+            cursor={{ fill: "var(--muted)", opacity: 0.4 }}
+            content={
+              <ChartTooltipContent
+                labelFormatter={(_, p) => {
+                  const b = p?.[0]?.payload
+                  return b ? `Confidence ${pct(b.low, 0)} to ${pct(b.high, 0)}` : ""
+                }}
+              />
+            }
+          />
+          <Bar isAnimationActive={false} dataKey="auto" stackId="c" fill="var(--color-auto)" />
+          <Bar isAnimationActive={false} dataKey="review" stackId="c" fill="var(--color-review)" radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ChartContainer>
+      <div className="flex gap-4 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="size-2.5 rounded-[3px]" style={{ background: "var(--chart-1)" }} />Automatic</span>
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="size-2.5 rounded-[3px]" style={{ background: "var(--warning)" }} />Needs review</span>
+      </div>
+    </Panel>
+  )
+}
+
+export function FlagsChart({
+  insights,
+  selected,
+  onSelect,
+}: {
+  insights: Insights
+  selected: string | null
+  onSelect: (flag: string | null) => void
+}) {
+  const data = insights.flags.map((f) => ({ ...f, name: flagLabel(f.flag) }))
+  return (
+    <Panel title="Warnings raised" description={data.length ? clickHint : undefined}>
+      {data.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">No warnings: every input looked familiar.</p>
+      ) : (
+        <ChartContainer config={{ rows: { label: "Rows" } }} className="h-[200px] w-full">
+          <BarChart data={data} layout="vertical" margin={{ left: 4, right: 48 }}>
+            <CartesianGrid horizontal={false} stroke="var(--grid)" />
+            <XAxis type="number" hide />
+            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={140} />
+            <ChartTooltip cursor={{ fill: "var(--muted)", opacity: 0.4 }} content={<ChartTooltipContent hideIndicator />} />
+            <Bar isAnimationActive={false}
+              dataKey="rows"
+              radius={[0, 4, 4, 0]}
+              barSize={16}
+              className="cursor-pointer"
+              onClick={(d: { payload?: { flag: string } }) => {
+                const flag = d.payload?.flag ?? null
+                onSelect(flag === selected ? null : flag)
+              }}
+            >
+              {data.map((f) => (
+                <Cell key={f.flag} fill="var(--warning)" fillOpacity={selected && selected !== f.flag ? 0.3 : 0.85} />
+              ))}
+              <LabelList dataKey="rows" position="right" className="fill-muted-foreground text-[11px]" />
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      )}
+    </Panel>
+  )
+}
