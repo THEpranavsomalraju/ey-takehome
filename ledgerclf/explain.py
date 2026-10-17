@@ -389,13 +389,17 @@ def _main_reason(payload: dict[str, Any]) -> str:
             f"mainly because most invoices ({prior:.0%}) belong to {label}; this line's own "
             f"details lean toward {runner}."
         )
-    supporting = [g for g in contributions["by_group"] if g["contribution"] > 0]
-    history = _best_history(payload, [g["group"] for g in supporting])
+    supporting = sorted(
+        (g for g in contributions["by_group"] if g["contribution"] > 0),
+        key=lambda g: -g["contribution"],
+    )
+    if not supporting:
+        return "although no single detail stands out."
+    strongest = supporting[0]
+    history = _best_history(payload, [strongest["group"]])
     if history is not None:
         return f"mainly because {history}."
-    if supporting:
-        return f"mainly because of its {supporting[0]['label']}."
-    return "although no single detail stands out."
+    return f"mainly because of its {strongest['label']}."
 
 
 def _best_history(payload: dict[str, Any], groups: list[str]) -> str | None:

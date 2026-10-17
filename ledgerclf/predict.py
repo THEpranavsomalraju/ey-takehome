@@ -32,6 +32,7 @@ from ledgerclf.io import ReadInfo, read_table
 from ledgerclf.jsonsafe import to_jsonable
 from ledgerclf.labels import CANONICAL_CLASSES, normalize_labels
 from ledgerclf.schema import (
+    COL_PERIOD,
     INPUT_COLUMNS,
     LABEL_COLUMN,
     ROW_NUMBER,
@@ -40,6 +41,7 @@ from ledgerclf.schema import (
     ValidationIssue,
     ValidationReport,
     coerce_values,
+    column_day_first,
     make_issue,
     resolve_columns,
 )
@@ -81,6 +83,7 @@ class PredictionResult:
     frame: pd.DataFrame = field(repr=False, default_factory=pd.DataFrame)
     row_flags: pd.DataFrame = field(repr=False, default_factory=pd.DataFrame)
     read_info: ReadInfo | None = None
+    day_first: bool = False  # date order decided for this upload's Col5
 
     def to_records(self) -> list[dict[str, Any]]:
         """Return the predictions as JSON-safe dicts (native types, None for missing)."""
@@ -227,6 +230,7 @@ def predict_frame(
         },
         frame=frame,
         row_flags=flags,
+        day_first=column_day_first(resolved[COL_PERIOD]) if COL_PERIOD in resolved else False,
     )
 
 

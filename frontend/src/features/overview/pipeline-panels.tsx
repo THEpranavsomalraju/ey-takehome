@@ -4,41 +4,54 @@ import { ChartSkeleton, LoadError, Panel, Stat } from "@/components/blocks"
 import { Card, CardContent } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { columnName, num, pct } from "@/lib/domain"
+import { api, type ModelInfo } from "@/lib/api"
+import { columnName, flagLabel, num, pct } from "@/lib/domain"
+import { useAsync } from "@/lib/use-async"
 import { asNumber, useJson, useTable } from "@/lib/reports"
 
-const STAGES = [
-  {
-    icon: FileSpreadsheetIcon,
-    title: "Read and validate",
-    text: "Any Excel or CSV layout: header detection, column mapping, encodings, delimiters. Problems become warnings; every row is kept.",
-  },
-  {
-    icon: LayersIcon,
-    title: "Features",
-    text: "Words per column (TF-IDF), recurring vendors and accounts, amount as signed log plus credit and round flags, posting month.",
-  },
-  {
-    icon: GaugeIcon,
-    title: "Blend model",
-    text: "0.7 x logistic regression + 0.3 x LightGBM in log-odds, calibrated with one temperature.",
-  },
-  {
-    icon: ShieldCheckIcon,
-    title: "Review routing",
-    text: "Confidence below 0.8, a new vendor, or a new GL account sends the row to a person.",
-  },
-  {
-    icon: SparklesIcon,
-    title: "Explanation",
-    text: "Exact per-input contributions plus training evidence; Claude turns them into plain language on request.",
-  },
-]
+function stages(model: ModelInfo | null) {
+  const weight = Number(model?.champion.linear_weight ?? 0.7)
+  const critical = Object.entries(model?.review_policy.severities ?? {})
+    .filter(([code, severity]) => severity === "critical" && code !== "LOW_CONFIDENCE")
+    .map(([code]) => flagLabel(code).toLowerCase())
+    .sort()
+  return [
+    {
+      icon: FileSpreadsheetIcon,
+      title: "Read and validate",
+      text: "Any Excel or CSV layout: header detection, column mapping, encodings, delimiters. Problems become warnings; every row is kept.",
+    },
+    {
+      icon: LayersIcon,
+      title: "Features",
+      text: "Words per column (TF-IDF), recurring vendors and accounts, amount as signed log plus credit and round flags, posting month.",
+    },
+    {
+      icon: GaugeIcon,
+      title: "Blend model",
+      text: `${weight.toFixed(1)} x logistic regression + ${(1 - weight).toFixed(1)} x LightGBM in log-odds, calibrated with one temperature.`,
+    },
+    {
+      icon: ShieldCheckIcon,
+      title: "Review routing",
+      text: model
+        ? `Confidence below ${pct(model.review_policy.threshold, 0)}, or a critical warning (${critical.join(", ")}), sends the row to a person.`
+        : "Low confidence or a critical warning sends the row to a person.",
+    },
+    {
+      icon: SparklesIcon,
+      title: "Explanation",
+      text: "Exact per-input contributions plus training evidence; Claude turns them into plain language on request.",
+    },
+  ]
+}
 
 export function PipelineFlow() {
+  const model = useAsync<ModelInfo>("model-info", api.model)
+  const list = stages(model.data)
   return (
     <div className="grid gap-3 md:grid-cols-5">
-      {STAGES.map((stage, i) => (
+      {list.map((stage, i) => (
         <div key={stage.title} className="relative">
           <Card className="h-full gap-2 py-4">
             <CardContent className="space-y-2 px-4">
@@ -52,7 +65,7 @@ export function PipelineFlow() {
               <p className="text-xs leading-relaxed text-muted-foreground">{stage.text}</p>
             </CardContent>
           </Card>
-          {i < STAGES.length - 1 && (
+          {i < list.length - 1 && (
             <ArrowRightIcon className="absolute top-1/2 -right-3 z-10 hidden size-4 -translate-y-1/2 text-muted-foreground md:block" />
           )}
         </div>
@@ -91,7 +104,7 @@ export function FeatureCatalogPanel() {
       title="Feature pipeline"
       description={`One scikit-learn pipeline, fitted only on training rows, used identically for uploads. ${num(total)} features with single words; the final model adds word pairs.`}
     >
-      {catalog.error && <LoadError error={catalog.error} />}
+      {(catalog.error || space.error) && <LoadError error={(catalog.error ?? space.error) as Error} />}
       {loading ? (
         <ChartSkeleton height={320} />
       ) : (

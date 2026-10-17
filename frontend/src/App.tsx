@@ -43,7 +43,7 @@ export default function App() {
       </main>
       <footer className="border-t">
         <div className="mx-auto max-w-[1440px] px-4 py-4 text-xs text-muted-foreground sm:px-6">
-          EY AI Technical Assessment - every figure on this page comes from the report files in reports/.
+          EY AI Technical Assessment. Figures come from the report files in reports/ and the loaded model.
         </div>
       </footer>
     </Tabs>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { ClassLabel } from "@/components/blocks"
@@ -37,17 +37,14 @@ export function ResultsTable({
   selectedRow: number | null
   onSelect: (row: number) => void
 }) {
-  const [offset, setOffset] = useState(0)
+  // The page position belongs to one query: a new filter or search starts at page 1.
+  const [position, setPosition] = useState<{ query: RowQuery; offset: number }>({ query, offset: 0 })
+  const offset = position.query === query ? position.offset : 0
+  const setOffset = (next: number) => setPosition({ query, offset: next })
   const [page, setPage] = useState<Page | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState(query.q)
-  const onQuery = useCallback(
-    (next: RowQuery) => {
-      setOffset(0)
-      setQuery(next)
-    },
-    [setQuery],
-  )
+  const onQuery = setQuery
 
   useEffect(() => {
     const handle = setTimeout(() => {

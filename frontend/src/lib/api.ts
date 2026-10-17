@@ -147,7 +147,7 @@ export interface ExplanationPayload {
     training_rows: number
     class_prior: Record<string, number>
     period_range: [string, string]
-    amount_percentile: number
+    amount_percentile: number | null
   }
   fallback_text: string
 }
@@ -173,7 +173,7 @@ export interface ModelInfo {
   fallback_active: boolean
   fallback_reason: string | null
   champion: Record<string, unknown> & { name: string; temperature: number }
-  fallback: Record<string, unknown> & { name: string }
+  fallback: Record<string, unknown> & { name: string; temperature: number }
   training_rows: number
   created_utc: string
   review_policy: { threshold: number; severities: Record<string, string> }

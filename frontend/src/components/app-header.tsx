@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { CircleCheckIcon, CircleXIcon, CpuIcon, KeyRoundIcon, SettingsIcon, TriangleAlertIcon } from "lucide-react"
 
+import { LoadError } from "@/components/blocks"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -96,14 +97,18 @@ export function SettingsPopover() {
 export function ModelSheet() {
   const model = useAsync<ModelInfo>("model-info", api.model)
   const [health, setHealth] = useState<HealthCheck[] | null>(null)
+  const [healthError, setHealthError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const info = model.data
+  const active = info ? (info.fallback_active ? info.fallback : info.champion) : null
+  const scores = (active?.scores ?? {}) as Record<string, number>
   const runHealth = () => {
     setChecking(true)
+    setHealthError(null)
     api
       .health()
       .then((h) => setHealth(h.checks))
-      .catch(() => setHealth([]))
+      .catch((e: Error) => setHealthError(e.message))
       .finally(() => setChecking(false))
   }
   return (
@@ -122,7 +127,9 @@ export function ModelSheet() {
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
           <div className="space-y-6 px-6 py-5 text-sm">
-            {!info ? (
+            {model.error ? (
+              <LoadError error={model.error} />
+            ) : !info || !active ? (
               <Spinner />
             ) : (
               <>
@@ -138,11 +145,11 @@ export function ModelSheet() {
                     <dt className="text-muted-foreground">Trained on</dt>
                     <dd>{num(info.training_rows)} rows (holdout excluded)</dd>
                     <dt className="text-muted-foreground">CV accuracy</dt>
-                    <dd className="tabular">{pct(Number(info.cv_summary.cv_accuracy))}</dd>
+                    <dd className="tabular">{pct(Number(scores.cv_accuracy))}</dd>
                     <dt className="text-muted-foreground">CV macro F1</dt>
-                    <dd className="tabular">{Number(info.cv_summary.macro_f1_5).toFixed(3)}</dd>
+                    <dd className="tabular">{Number(scores.macro_f1_5).toFixed(3)}</dd>
                     <dt className="text-muted-foreground">Calibration</dt>
-                    <dd className="tabular">temperature {info.champion.temperature.toFixed(3)}</dd>
+                    <dd className="tabular">temperature {Number(active.temperature).toFixed(3)}</dd>
                     <dt className="text-muted-foreground">Trained</dt>
                     <dd>{new Date(info.created_utc).toLocaleString()}</dd>
                   </dl>
@@ -189,6 +196,7 @@ export function ModelSheet() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">Same checks as python -m ledgerclf doctor (takes a few seconds).</p>
+                  {healthError && <p className="text-xs text-destructive">{healthError}</p>}
                   {health && (
                     <ul className="space-y-1 text-xs">
                       {health.map((c) => (

@@ -1,6 +1,6 @@
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ReferenceLine, XAxis, YAxis } from "recharts"
 
-import { Panel } from "@/components/blocks"
+import { Panel, SeriesLegend } from "@/components/blocks"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import type { Insights } from "@/lib/api"
 import { CLASS_COLORS, flagLabel, num, pct } from "@/lib/domain"
@@ -69,7 +69,7 @@ export function ConfidenceChart({ insights }: { insights: Insights }) {
   return (
     <Panel
       title="How confident the model is"
-      description={`Rows per confidence level (square-root scale). Below ${pct(insights.threshold, 0)} (dashed line) a row always goes to review; warnings can send confident rows too.`}
+      description={`Rows per confidence level, automatic and review side by side (square-root scale). Below ${pct(insights.threshold, 0)} (dashed line) a row always goes to review; warnings can send confident rows too.`}
     >
       <ChartContainer
         config={{
@@ -78,7 +78,7 @@ export function ConfidenceChart({ insights }: { insights: Insights }) {
         }}
         className="h-[200px] w-full"
       >
-        <BarChart data={data} margin={{ left: -16, right: 8 }} barCategoryGap={1}>
+        <BarChart data={data} margin={{ left: -16, right: 8 }} barCategoryGap={2} barGap={1}>
           <CartesianGrid vertical={false} stroke="var(--grid)" />
           <XAxis
             dataKey="bin"
@@ -102,14 +102,17 @@ export function ConfidenceChart({ insights }: { insights: Insights }) {
               />
             }
           />
-          <Bar isAnimationActive={false} dataKey="auto" stackId="c" fill="var(--color-auto)" />
-          <Bar isAnimationActive={false} dataKey="review" stackId="c" fill="var(--color-review)" radius={[3, 3, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="auto" fill="var(--color-auto)" radius={[2, 2, 0, 0]} />
+          <Bar isAnimationActive={false} dataKey="review" fill="var(--color-review)" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ChartContainer>
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="size-2.5 rounded-[3px]" style={{ background: "var(--chart-1)" }} />Automatic</span>
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><span className="size-2.5 rounded-[3px]" style={{ background: "var(--warning)" }} />Needs review</span>
-      </div>
+      <SeriesLegend
+        shape="swatch"
+        items={[
+          { label: "Automatic", color: "var(--chart-1)" },
+          { label: "Needs review", color: "var(--warning)" },
+        ]}
+      />
     </Panel>
   )
 }

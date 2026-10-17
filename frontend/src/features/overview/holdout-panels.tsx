@@ -24,8 +24,10 @@ interface Evaluation {
 
 export function HeadlineStats() {
   const { data, error } = useJson<Evaluation>("holdout/holdout_evaluation.json")
-  if (error) return <LoadError error={error} />
-  if (!data) return <ChartSkeleton height={104} />
+  const classes = useTable<{ class: string; share: number }>("eda/class_distribution.csv")
+  if (error || classes.error) return <LoadError error={(error ?? classes.error) as Error} />
+  if (!data || !classes.data) return <ChartSkeleton height={104} />
+  const majority = classes.data.rows.reduce((top, r) => (asNumber(r.share) > asNumber(top.share) ? r : top))
   const c = data.champion
   const cv = data.cv_estimate_champion
   return (
@@ -35,7 +37,7 @@ export function HeadlineStats() {
         value={pct(c.accuracy)}
         emphasis
         detail={`${num(data.rows)} rows never used in development`}
-        hint="Scored once, at the very end, with the final model exactly as trained. The fallback model scores 95.3%."
+        hint={`Scored once, at the very end, with the final model exactly as trained. The fallback model scores ${pct(data.fallback_logistic.accuracy)}.`}
       />
       <Stat
         label="Expected accuracy on new data"
@@ -45,15 +47,15 @@ export function HeadlineStats() {
       />
       <Stat
         label="Baseline"
-        value="88.4%"
-        detail="Always answering Category_1"
+        value={pct(asNumber(majority.share))}
+        detail={`Always answering ${majority.class}`}
         hint="The share of the most common category. Every model must beat this."
       />
       <Stat
         label="Accuracy without review"
         value={pct(c.accuracy_auto)}
         detail={`${pct(c.review_share)} of holdout rows sent to review`}
-        hint="Rows the model is confident about, with no risk flag, are decided automatically. The rest go to a person."
+        hint="Rows the model is confident about, with no critical warning, are decided automatically. The rest go to a person."
       />
     </div>
   )
@@ -126,9 +128,11 @@ export function PerClassPanel() {
     <Panel
       title="Quality per category"
       description="Recall: share of a category's rows the model finds. Precision: share of its predictions that are right."
-      takeaway="Common categories are near perfect. Rare categories have 2 to 20 training rows, so their scores move a lot with each row; those predictions are best confirmed by a person."
+      takeaway="Category_1 is near perfect and Category_2 is found about 8 times in 10. Rare categories have 2 to 20 training rows, so their scores move a lot with each row; those predictions are best confirmed by a person."
     >
-      {(holdout.error || oof.error) && <LoadError error={(holdout.error ?? oof.error) as Error} />}
+      {(holdout.error || oof.error || train.error) && (
+        <LoadError error={(holdout.error ?? oof.error ?? train.error) as Error} />
+      )}
       {loading ? (
         <ChartSkeleton height={240} />
       ) : (

@@ -65,7 +65,7 @@ export function OverviewTab() {
           id="results"
           eyebrow="Results"
           title="An invoice classifier that knows when to ask for help"
-          description="The model suggests one of six categories for every accounts payable line, says how sure it is, and sends uncertain or unfamiliar lines to a person. These numbers come from 590 holdout rows that were never used during development."
+          description="The model suggests one of six categories for every accounts payable line, says how sure it is, and sends uncertain or unfamiliar lines to a person. The holdout figures come from 590 rows that were never used during development; the expected accuracy is the cross-validation estimate."
         >
           <HeadlineStats />
         </Section>
@@ -85,7 +85,7 @@ export function OverviewTab() {
             <Panel
               title="Repeated rows"
               description="Rows identical on every model input except the invoice number."
-              takeaway="A quarter of the rows repeat another row exactly. The labels are consistent, so the model can learn the patterns, but testing must keep copies apart (next section)."
+              takeaway="A quarter of the rows repeat an earlier row exactly, and copies almost always share a label. The model can learn these patterns, but testing must keep copies apart (next section)."
             >
               <DuplicateStats />
             </Panel>

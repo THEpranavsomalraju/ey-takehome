@@ -6,7 +6,6 @@ import { Heatmap } from "@/components/heatmap"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { api, type Issue, type Upload } from "@/lib/api"
 import { CLASSES, modelName, num, pct, shortClass } from "@/lib/domain"
 import { cn } from "@/lib/utils"
@@ -50,11 +49,12 @@ export function FileBar({ upload }: { upload: Upload }) {
 
 export function IssuesList({ issues, fallbackReason }: { issues: Issue[]; fallbackReason: string | null }) {
   const [open, setOpen] = useState(false)
-  const warnings = issues.filter((i) => i.severity !== "INFO").length
+  const warnings = issues.filter((i) => i.severity !== "INFO").length + (fallbackReason ? 1 : 0)
   const shown = open ? issues : issues.slice(0, 3)
+  const total = issues.length + (fallbackReason ? 1 : 0)
   return (
     <Card className="gap-0 py-0">
-      <Collapsible open={open} onOpenChange={setOpen}>
+      <div>
         <div className="flex items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-center gap-2 text-sm">
             {warnings ? (
@@ -63,19 +63,15 @@ export function IssuesList({ issues, fallbackReason }: { issues: Issue[]; fallba
               <CircleCheckIcon className="size-4 text-good" />
             )}
             <span className="font-medium">
-              {issues.length === 0
-                ? "File read cleanly"
-                : `${issues.length} validation ${issues.length === 1 ? "message" : "messages"}`}
+              {total === 0 ? "File read cleanly" : `${total} validation ${total === 1 ? "message" : "messages"}`}
             </span>
             {warnings > 0 && <span className="text-muted-foreground">({warnings} need attention)</span>}
           </div>
           {issues.length > 3 && (
-            <CollapsibleTrigger asChild>
-              <Button size="sm" variant="ghost" className="text-xs">
-                {open ? "Show fewer" : `Show all ${issues.length}`}
-                <ChevronDownIcon className={cn("transition-transform", open && "rotate-180")} />
-              </Button>
-            </CollapsibleTrigger>
+            <Button size="sm" variant="ghost" className="text-xs" aria-expanded={open} onClick={() => setOpen(!open)}>
+              {open ? "Show fewer" : `Show all ${issues.length}`}
+              <ChevronDownIcon className={cn("transition-transform", open && "rotate-180")} />
+            </Button>
           )}
         </div>
         {(issues.length > 0 || fallbackReason) && (
@@ -88,8 +84,7 @@ export function IssuesList({ issues, fallbackReason }: { issues: Issue[]; fallba
             ))}
           </ul>
         )}
-        <CollapsibleContent />
-      </Collapsible>
+      </div>
     </Card>
   )
 }

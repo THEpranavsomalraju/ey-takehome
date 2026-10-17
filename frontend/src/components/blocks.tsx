@@ -177,3 +177,29 @@ export function ClassLegend({ classes }: { classes: readonly string[] }) {
     </div>
   )
 }
+
+/** Legend for chart series that are not categories (lines or swatches with a label). */
+export function SeriesLegend({
+  items,
+  shape = "line",
+  className,
+}: {
+  items: { label: string; color: string }[]
+  shape?: "line" | "swatch"
+  className?: string
+}) {
+  return (
+    <div className={cn("flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground", className)}>
+      {items.map((item) => (
+        <span key={item.label} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <span
+            aria-hidden
+            className={shape === "line" ? "h-0.5 w-4" : "size-2.5 rounded-[3px]"}
+            style={{ backgroundColor: item.color }}
+          />
+          {item.label}
+        </span>
+      ))}
+    </div>
+  )
+}

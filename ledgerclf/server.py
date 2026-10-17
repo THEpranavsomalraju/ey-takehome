@@ -8,6 +8,7 @@ Every error reaches the browser as JSON with a plain-English message.
 from __future__ import annotations
 
 import logging
+import mimetypes
 import socket
 import threading
 import uuid
@@ -127,6 +128,8 @@ def _add_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(LedgerClfError)
     async def ledger_error(_: Request, error: LedgerClfError) -> JSONResponse:
         status = 503 if isinstance(error, ArtifactError) else 422
+        if error.code == "REPORT_MISSING":
+            status = 404
         return JSONResponse(status_code=status, content=error.to_dict())
 
     @app.exception_handler(StarletteHTTPException)
@@ -138,9 +141,12 @@ def _add_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(_: Request, error: RequestValidationError) -> JSONResponse:
-        problems = "; ".join(
-            f"{'.'.join(str(p) for p in item['loc'])}: {item['msg']}" for item in error.errors()
-        )
+        if any(tuple(item["loc"]) == ("body", "file") for item in error.errors()):
+            problems = "Choose an Excel (.xlsx, .xls) or CSV file to upload."
+        else:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in item['loc'])}: {item['msg']}" for item in error.errors()
+            )
         return JSONResponse(
             status_code=422, content={"code": "INVALID_REQUEST", "message": problems}
         )
@@ -251,7 +257,19 @@ def _add_prediction_routes(app: FastAPI, service: PredictionService, cache: Resu
         return {"answer": answer.to_dict(), "payload": payload}
 
 
+# Windows can map .js to text/plain in its registry, and browsers refuse module
+# scripts served that way; pin the types the dashboard build uses.
+STATIC_TYPES = (
+    ("text/javascript", ".js"),
+    ("text/css", ".css"),
+    ("image/svg+xml", ".svg"),
+    ("font/woff2", ".woff2"),
+)
+
+
 def _mount_frontend(app: FastAPI) -> None:
+    for media_type, extension in STATIC_TYPES:
+        mimetypes.add_type(media_type, extension)
     if (FRONTEND_DIST / "index.html").exists():
         app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="dashboard")
         return

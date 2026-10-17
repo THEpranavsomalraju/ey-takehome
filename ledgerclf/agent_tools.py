@@ -226,7 +226,11 @@ def what_if(context: ToolContext, column: str, value: str) -> dict[str, Any]:
     edited = original[[SOURCE_ROW, *INPUT_COLUMNS]].copy()
     edited[column] = value
     try:  # the same cleaning as an upload, so the answer matches re-uploading the row
-        row, _ = coerce_values(edited.reset_index(drop=True), context.service.settings.limits)
+        row, _ = coerce_values(
+            edited.reset_index(drop=True),
+            context.service.settings.limits,
+            day_first=context.result.day_first,
+        )
     except LedgerClfError as error:
         raise ToolError(f"'{value}' cannot be scored: {error.message}") from error
     if column == COL_AMOUNT and bool(row[AMOUNT_WAS_MISSING].iloc[0]):
@@ -237,7 +241,7 @@ def what_if(context: ToolContext, column: str, value: str) -> dict[str, Any]:
     order = np.argsort(-proba)
     original = context.payload["prediction"]
     return {
-        "changed": {"column": column, "value": value},
+        "changed": {"column": column, "value": value, "read_as": row[column].iloc[0]},
         "original_prediction": {"label": original["label"], "probability": original["probability"]},
         "new_prediction": {
             "label": CANONICAL_CLASSES[order[0]],

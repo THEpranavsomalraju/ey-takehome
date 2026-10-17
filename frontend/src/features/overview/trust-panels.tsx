@@ -1,15 +1,14 @@
 import { useMemo, useState } from "react"
 import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, XAxis, YAxis } from "recharts"
 
-import { ChartSkeleton, LoadError, Panel, Segmented } from "@/components/blocks"
+import { ChartSkeleton, LoadError, Panel, Segmented, SeriesLegend } from "@/components/blocks"
 import { DotPlot } from "@/components/dot-plot"
 import { Badge } from "@/components/ui/badge"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { Slider } from "@/components/ui/slider"
 import { flagLabel, num, pct } from "@/lib/domain"
-import { asNumber, useJson, useTable } from "@/lib/reports"
+import { asNumber, useFinalModel, useJson, useTable } from "@/lib/reports"
 
-const FINAL = "logodds_blend_p0.25"
 const capitalize = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
 
 type ReliabilityRow = {
@@ -26,8 +25,9 @@ export function CalibrationPanel() {
     "selection/calibration_summary.json",
   )
   const [stage, setStage] = useState<"both" | "after" | "before">("both")
+  const final = useFinalModel().name
   const points = useMemo(() => {
-    const rows = (data?.rows ?? []).filter((r) => r.model === FINAL && asNumber(r.rows) > 0)
+    const rows = (data?.rows ?? []).filter((r) => r.model === final && asNumber(r.rows) > 0)
     const pick = (s: string) =>
       rows.filter((r) => r.stage === s).map((r) => ({
         confidence: asNumber(r.mean_confidence),
@@ -35,8 +35,8 @@ export function CalibrationPanel() {
         rows: asNumber(r.rows),
       }))
     return { before: pick("before"), after: pick("after") }
-  }, [data])
-  const stats = summary.data?.[FINAL]
+  }, [data, final])
+  const stats = final ? summary.data?.[final] : undefined
   return (
     <Panel
       title="Does 90% confident mean 90% right?"
@@ -149,13 +149,18 @@ export function ThresholdPanel() {
     [data],
   )
   const chosenIndex = Math.max(0, rows.findIndex((r) => r.chosen))
+  const chosen = rows.find((r) => r.chosen)
   const [index, setIndex] = useState<number | null>(null)
   const current = rows[index ?? chosenIndex]
   return (
     <Panel
       title="Review threshold explorer"
       description="Rows below the threshold go to a person. Drag to see the trade-off (out-of-fold, 5,309 rows)."
-      takeaway="The chosen threshold (0.80) is the lowest one at which the automatically decided rows reach 97.5% accuracy. About 7% of rows go to review, and those rows are only 63% accurate, so review effort lands where the model is weak."
+      takeaway={
+        chosen
+          ? `The chosen threshold (${chosen.threshold.toFixed(2)}) is the lowest one at which the automatically decided rows reach the accuracy target. ${pct(1 - chosen.coverage, 0)} of rows go to review, and those rows are only ${pct(chosen.flagged, 0)} accurate, so review effort lands where the model is weak.`
+          : undefined
+      }
     >
       {error && <LoadError error={error} />}
       {!current ? (
@@ -223,11 +228,13 @@ export function ThresholdPanel() {
               <ReferenceDot x={current.threshold} y={current.kept} r={4} fill="var(--primary)" stroke="var(--card)" />
             </LineChart>
           </ChartContainer>
-          <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: "var(--chart-1)" }} />Decided automatically</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-primary" />Accuracy, automatic</span>
-            <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4" style={{ background: "var(--against)" }} />Accuracy, reviewed</span>
-          </div>
+          <SeriesLegend
+            items={[
+              { label: "Decided automatically", color: "var(--chart-1)" },
+              { label: "Accuracy, automatic", color: "var(--primary)" },
+              { label: "Accuracy, reviewed", color: "var(--against)" },
+            ]}
+          />
         </>
       )}
     </Panel>
@@ -239,12 +246,18 @@ type FlagRow = { flag: string; rows: number; accuracy: number | null; severity?:
 export function FlagReliabilityPanel() {
   const oof = useTable<FlagRow>("selection/accuracy_by_flag.csv")
   const holdout = useTable<FlagRow>("holdout/holdout_accuracy_by_flag.csv")
+  const evaluation = useJson<{ champion: { accuracy: number } }>("holdout/holdout_evaluation.json")
   const [source, setSource] = useState<"oof" | "holdout">("oof")
   const table = source === "oof" ? oof : holdout
-  const overall = useMemo(
-    () => asNumber(oof.data?.rows.find((r) => r.flag === "(all rows)")?.accuracy ?? 0.954),
+  // Severities are set out of fold; the holdout table reuses them by flag code.
+  const severity = useMemo(
+    () => new Map((oof.data?.rows ?? []).map((r) => [r.flag, r.severity])),
     [oof.data],
   )
+  const overall =
+    source === "oof"
+      ? oof.data?.rows.find((r) => r.flag === "(all rows)")?.accuracy
+      : evaluation.data?.champion.accuracy
   const items = useMemo(
     () =>
       (table.data?.rows ?? [])
@@ -256,7 +269,7 @@ export function FlagReliabilityPanel() {
             label: (
               <span className="inline-flex items-center gap-1.5">
                 {label}
-                {r.severity === "critical" && (
+                {severity.get(r.flag) === "critical" && (
                   <Badge variant="outline" className="h-4 px-1 text-[10px] text-critical">review</Badge>
                 )}
               </span>
@@ -266,7 +279,7 @@ export function FlagReliabilityPanel() {
             detail: `${label}: ${pct(asNumber(r.accuracy))} accurate on ${num(asNumber(r.rows))} rows`,
           }
         }),
-    [table.data],
+    [table.data, severity],
   )
   return (
     <Panel
@@ -283,13 +296,17 @@ export function FlagReliabilityPanel() {
           ]}
         />
       }
-      takeaway="Rows with no flag are about 98% accurate. New vendors, new GL accounts, and low confidence are where the model errs, so those rows require review. Flags never hide a prediction."
+      takeaway={
+        source === "oof"
+          ? "Rows with no flag are about 98% accurate. New vendors, new GL accounts, and low confidence are where the model errs, so those rows require review. Flags never hide a prediction."
+          : "On the holdout the same warnings mark the weaker rows: low-confidence rows are far less accurate than the holdout as a whole. Severities come from cross-validation, never from the holdout."
+      }
     >
       {table.error && <LoadError error={table.error} />}
       {!table.data ? (
         <ChartSkeleton height={220} />
       ) : (
-        <DotPlot items={items} domain={[0.5, 1]} format={(v) => pct(v, 1)} tickFormat={(v) => pct(v, 0)} ticks={[0.5, 0.6, 0.7, 0.8, 0.9, 1]} reference={{ value: overall, label: "all rows" }} />
+        <DotPlot items={items} domain={[0.5, 1]} format={(v) => pct(v, 1)} tickFormat={(v) => pct(v, 0)} ticks={[0.5, 0.6, 0.7, 0.8, 0.9, 1]} reference={overall == null ? undefined : { value: asNumber(overall), label: source === "oof" ? "all rows, cross-validation" : "all holdout rows" }} />
       )}
     </Panel>
   )

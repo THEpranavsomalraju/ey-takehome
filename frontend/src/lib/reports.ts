@@ -14,3 +14,11 @@ export function useJson<T>(file: string) {
 }
 
 export const asNumber = (value: unknown) => (typeof value === "number" ? value : Number(value))
+
+/** Name of the final model, read from the selection report (no hard-coded copy). */
+export function useFinalModel() {
+  const { data } = useJson<{ champion: string; fallback: string }>("selection/champion_decision.json")
+  const name = data?.champion ?? null
+  // The benchmark leaderboard spells powers without the dot: logodds_blend_p0.25 -> p025.
+  return { name, leaderboardKey: name ? name.replace(".", "") : null }
+}

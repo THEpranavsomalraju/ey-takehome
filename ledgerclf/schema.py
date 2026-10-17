@@ -480,7 +480,7 @@ def _with_optional(frame: pd.DataFrame, issues: list[ValidationIssue]) -> pd.Dat
 
 
 def coerce_values(
-    frame: pd.DataFrame, limits: Limits
+    frame: pd.DataFrame, limits: Limits, day_first: bool | None = None
 ) -> tuple[pd.DataFrame, list[ValidationIssue]]:
     """Clean every value of a resolved frame into typed columns.
 
@@ -491,6 +491,8 @@ def coerce_values(
     Args:
         frame: Output of ``resolve_columns``.
         limits: Input limits (text length).
+        day_first: Date order to use for Col5; None decides it from the column itself
+            (an edited single row reuses the decision made for its whole upload).
 
     Returns:
         Tuple of (typed frame, issues). The frame holds ``row_number``,
@@ -508,7 +510,9 @@ def coerce_values(
         truncated_columns[column] = np.array([c[1] for c in cleaned], dtype=bool)
     out[COL_DOC_TYPE] = out[COL_DOC_TYPE].map(_canonical_doc_type).astype(object)
     out[AMOUNT] = _coerce_amounts(frame[COL_AMOUNT])
-    out[PERIOD], out[COL_PERIOD], date_issues = _coerce_periods(frame[COL_PERIOD], limits)
+    out[PERIOD], out[COL_PERIOD], date_issues = _coerce_periods(
+        frame[COL_PERIOD], limits, day_first
+    )
     if LABEL_COLUMN in frame.columns:
         out[LABEL_COLUMN] = pd.Series(
             [clean_text(v, limits.header_max_chars)[0] for v in frame[LABEL_COLUMN]], dtype=object
@@ -545,13 +549,27 @@ def _amount_display(raw: pd.Series, parsed: pd.Series, limits: Limits) -> pd.Ser
     return pd.Series(display, dtype=object)
 
 
+def column_day_first(values: Iterable[object]) -> bool:
+    """Decide the date order of a whole Col5 column: day first when more dates prove it.
+
+    Args:
+        values: Raw Col5 cells.
+
+    Returns:
+        True when day-first evidence (such as 31/08/2018) outweighs month-first evidence.
+    """
+    evidence = [date_order_evidence(v) for v in values]
+    return evidence.count("day_first") > evidence.count("month_first")
+
+
 def _coerce_periods(
-    values: pd.Series, limits: Limits
+    values: pd.Series, limits: Limits, day_first: bool | None
 ) -> tuple[pd.Series, pd.Series, list[ValidationIssue]]:
     raw = values.tolist()
     evidence = [date_order_evidence(v) for v in raw]
     day_votes, month_votes = evidence.count("day_first"), evidence.count("month_first")
-    day_first = day_votes > month_votes
+    if day_first is None:
+        day_first = column_day_first(raw)
     parsed = [parse_date(v, day_first=day_first) for v in raw]
     periods = pd.Series([np.nan if p is None else float(p.period_index) for p in parsed])
     display = [

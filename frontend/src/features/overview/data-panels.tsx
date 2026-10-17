@@ -30,7 +30,7 @@ export function ClassDistributionPanel() {
           ]}
         />
       }
-      takeaway="88.4% of rows are Category_1, so a model that always answers Category_1 is already 88.4% accurate. Results are therefore also reported as macro F1, which weighs every category equally."
+      takeaway="88.4% of rows are Category_1, so a model that always answers Category_1 is already 88.4% accurate. Results are therefore also reported as macro F1, which weighs the five categories with 11 or more rows equally."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -92,7 +92,7 @@ type PeriodRow = Record<string, string | number> & { period: string }
 export function MonthlyVolumePanel() {
   const { data, error } = useTable<PeriodRow>("eda/period_by_class.csv")
   const [view, setView] = useState<"all" | "rare">("rare")
-  const shown = view === "all" ? CLASSES : CLASSES.slice(2)
+  const shown = useMemo(() => (view === "all" ? [...CLASSES] : CLASSES.slice(2)), [view])
   const rows = useMemo(
     () => data?.rows.filter((r) => shown.some((c) => asNumber(r[c]) > 0)) ?? [],
     [data, shown],
@@ -100,7 +100,7 @@ export function MonthlyVolumePanel() {
   return (
     <Panel
       title="When each category occurs"
-      description="Training rows per posting month."
+      description={view === "rare" ? "Training rows per posting month; months without a rare-category row are left out." : "Training rows per posting month."}
       action={
         <Segmented
           label="Categories shown"
@@ -112,7 +112,7 @@ export function MonthlyVolumePanel() {
           ]}
         />
       }
-      takeaway="The rare categories cluster in particular months: Category_3 from 2018-05, Category_4 around year end, both Category_5 rows in 2018-10. That is why the posting month is a model input and why an out-of-time test is part of validation."
+      takeaway="The rare categories cluster in particular months: Category_3 from 2018-05, Category_4 spread through the year with a peak in 2018-07, both Category_5 rows in 2018-10. That is why the posting month is a model input and why an out-of-time test is part of validation."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -210,6 +210,7 @@ export function SignalPanel() {
 
 interface Duplicates {
   rows: number
+  rows_in_groups_with_copies: number
   duplicate_rows_group_key: number
   groups: number
   groups_with_copies: number
@@ -219,27 +220,27 @@ interface Duplicates {
 export function DuplicateStats() {
   const dup = useJson<Duplicates>("eda/duplicates_summary.json")
   const ceiling = useJson<{ text_amount_doc: { ceiling_accuracy: number } }>("eda/accuracy_ceiling.json")
-  if (dup.error) return <LoadError error={dup.error} />
+  if (dup.error || ceiling.error) return <LoadError error={(dup.error ?? ceiling.error) as Error} />
   if (!dup.data || !ceiling.data) return <ChartSkeleton height={96} />
   const d = dup.data
   return (
     <div className="grid flex-1 grid-cols-2 gap-3">
       <Stat
-        label="Rows with an exact copy"
+        label="Rows that repeat an earlier row"
         value={pct(d.duplicate_rows_group_key / d.rows, 0)}
         detail={`${num(d.duplicate_rows_group_key)} of ${num(d.rows)} training rows`}
-        hint="Rows identical on every model input except the invoice number. A random split would test the model on copies of training rows."
+        hint="Identical to an earlier row on every model input except the invoice number. A random split would test the model on copies of training rows."
       />
       <Stat
-        label="Duplicate groups"
-        value={num(d.groups)}
-        detail={`${num(d.groups_with_copies)} contain copies`}
-        hint="Grouped cross-validation keeps every group on one side of each split."
+        label="Rows in a group with copies"
+        value={pct(d.rows_in_groups_with_copies / d.rows, 0)}
+        detail={`${num(d.groups_with_copies)} groups of 2 or more`}
+        hint={`${num(d.groups)} distinct input patterns in total. Grouped cross-validation keeps every group on one side of each split.`}
       />
       <Stat
         label="Groups with conflicting labels"
         value={num(d.label_conflict_groups)}
-        detail="The labels are consistent"
+        detail={d.label_conflict_groups <= 1 ? "Copies almost always share a label" : "Some copies disagree on the label"}
       />
       <Stat
         label="Best possible accuracy"

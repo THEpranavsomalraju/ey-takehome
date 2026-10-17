@@ -19,6 +19,7 @@ from ledgerclf.schema import INPUT_COLUMNS, ROW_NUMBER
 
 SortOrder = Literal["row", "confidence_asc", "confidence_desc"]
 FLAG_SEPARATOR = "|"
+EDGE_DECIMALS = 6  # histogram edges without float noise such as 0.15000000000000002
 
 
 @dataclass(frozen=True)
@@ -41,12 +42,22 @@ class RowQuery:
 
 
 def filtered_rows(predictions: pd.DataFrame, query: RowQuery) -> pd.DataFrame:
-    """Return the prediction rows matching ``query``, in the requested order."""
+    """Return the prediction rows matching ``query``.
+
+    Args:
+        predictions: The prediction table of one upload.
+        query: Search text, filters, and sort order.
+
+    Returns:
+        The matching rows, sorted as requested (ties keep file order).
+    """
     keep = np.ones(len(predictions), dtype=bool)
     needle = query.search.strip().lower()
     if needle:
-        text = predictions[list(INPUT_COLUMNS)].astype(str).agg(" ".join, axis=1).str.lower()
-        keep &= text.str.contains(needle, regex=False).to_numpy()
+        # "string" dtype keeps missing cells empty (astype(str) would turn them into "None").
+        inputs = predictions[list(INPUT_COLUMNS)].astype("string").fillna("")
+        text = inputs.agg(" ".join, axis=1).str.lower()
+        keep &= text.str.contains(needle, regex=False).to_numpy(dtype=bool)
     if query.label:
         keep &= (predictions["predicted_label"] == query.label).to_numpy()
     if query.review_only:
@@ -99,8 +110,8 @@ def insights(result: PredictionResult, threshold: float, bins: int) -> dict[str,
     index = np.clip(np.digitize(confidence, edges[1:-1]), 0, bins - 1)
     histogram = [
         {
-            "low": float(edges[i]),
-            "high": float(edges[i + 1]),
+            "low": round(float(edges[i]), EDGE_DECIMALS),
+            "high": round(float(edges[i + 1]), EDGE_DECIMALS),
             "auto": int(((index == i) & ~review).sum()),
             "review": int(((index == i) & review).sum()),
         }
@@ -114,15 +125,23 @@ def insights(result: PredictionResult, threshold: float, bins: int) -> dict[str,
         }
         for label in CANONICAL_CLASSES
     ]
-    codes = pd.Series([c for f in predictions["flags"] for c in _flag_codes(f)], dtype=object)
-    flags = [{"flag": str(k), "rows": int(v)} for k, v in codes.value_counts().items()]
     return {
         "threshold": threshold,
         "confidence_histogram": histogram,
         "by_class": by_class,
-        "flags": flags,
+        "flags": _flag_counts(predictions["flags"]),
         "mean_confidence": float(confidence.mean()) if len(confidence) else None,
     }
+
+
+def _flag_counts(flags: pd.Series) -> list[dict[str, Any]]:
+    """Rows per flag code, most frequent first, ties by code (stable across pandas versions)."""
+    counts: dict[str, int] = {}
+    for value in flags:
+        for code in _flag_codes(value):
+            counts[code] = counts.get(code, 0) + 1
+    ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return [{"flag": code, "rows": rows} for code, rows in ordered]
 
 
 def _flag_codes(value: object) -> list[str]:

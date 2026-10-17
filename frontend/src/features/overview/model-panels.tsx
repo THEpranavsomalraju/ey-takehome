@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ReferenceLine, XAxis, YAxis } from "recharts"
 
-import { ChartSkeleton, LoadError, Panel, Segmented } from "@/components/blocks"
+import { ChartSkeleton, LoadError, Panel, Segmented, SeriesLegend } from "@/components/blocks"
 import { DotPlot } from "@/components/dot-plot"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
 import { CLASSES, pct, signed } from "@/lib/domain"
-import { asNumber, useTable } from "@/lib/reports"
+import { asNumber, useFinalModel, useTable } from "@/lib/reports"
 
 const MODEL_LABELS: Record<string, string> = {
   dummy_majority: "Always Category_1",
@@ -22,7 +22,6 @@ const MODEL_LABELS: Record<string, string> = {
   logodds_blend_p0: "Log-odds blend, unweighted",
   logodds_blend_p025: "Log-odds blend, weights 0.25",
 }
-const FINAL_MODEL = "logodds_blend_p025"
 const modelLabel = (key: string) => MODEL_LABELS[key] ?? key
 
 type SchemeRow = { model: string; scheme: string; accuracy: number; macro_f1_5: number }
@@ -82,6 +81,8 @@ export function LeaderboardPanel() {
   const { data, error } = useTable<BoardRow>("benchmark/leaderboard.csv")
   const [metric, setMetric] = useState<Metric>("accuracy")
   const [rareClass, setRareClass] = useState("Category_2")
+  const final = useFinalModel().leaderboardKey
+  const baseline = asNumber(data?.rows.find((r) => r.model === "dummy_majority")?.accuracy_mean ?? NaN)
   const items = useMemo(() => {
     const rows = data?.rows ?? []
     const value = (r: BoardRow) =>
@@ -95,18 +96,20 @@ export function LeaderboardPanel() {
         value: value(r),
         low: std(r) ? value(r) - std(r) : undefined,
         high: std(r) ? value(r) + std(r) : undefined,
-        highlight: r.model === FINAL_MODEL,
+        highlight: r.model === final,
         detail:
           metric === "recall"
             ? `${modelLabel(r.model)}: finds ${pct(value(r))} of ${rareClass} rows`
-            : `${modelLabel(r.model)}: ${pct(value(r))} ± ${pct(std(r))} over 3 seeds × 5 folds`,
+            : metric === "accuracy"
+              ? `${modelLabel(r.model)}: ${pct(value(r))} ± ${pct(std(r))} over 15 test folds`
+              : `${modelLabel(r.model)}: ${pct(value(r))} ± ${pct(std(r))} across 3 seeds`,
       }))
-  }, [data, metric, rareClass])
+  }, [data, metric, rareClass, final])
   const domain: [number, number] = metric === "accuracy" ? [0.86, 0.98] : [0, 1]
   return (
     <Panel
       title="Model comparison"
-      description="Every model on the same grouped folds (3 seeds × 5 folds). Lines show ±1 standard deviation."
+      description="Every model on the same grouped folds (3 seeds × 5 folds). Lines show ±1 standard deviation (accuracy: over folds; macro F1: over seeds)."
       action={
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
@@ -147,7 +150,7 @@ export function LeaderboardPanel() {
           format={(v) => pct(v)}
           tickFormat={(v) => pct(v, 0)}
           ticks={metric === "accuracy" ? [0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.98] : [0, 0.25, 0.5, 0.75, 1]}
-          reference={metric === "accuracy" ? { value: 0.8842, label: "always answering Category_1" } : undefined}
+          reference={metric === "accuracy" && Number.isFinite(baseline) ? { value: baseline, label: "always answering Category_1" } : undefined}
         />
       )}
     </Panel>
@@ -323,10 +326,12 @@ export function ClassWeightPanel() {
           </LineChart>
         </ChartContainer>
       )}
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-primary" />Log-odds blend</span>
-        <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 bg-muted-foreground" />Logistic regression</span>
-      </div>
+      <SeriesLegend
+        items={[
+          { label: "Log-odds blend", color: "var(--primary)" },
+          { label: "Logistic regression", color: "var(--muted-foreground)" },
+        ]}
+      />
     </Panel>
   )
 }

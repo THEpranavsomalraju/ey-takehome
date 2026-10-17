@@ -7,6 +7,7 @@ answers, so the tests are free, offline, and deterministic.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any
@@ -484,7 +485,7 @@ def test_api_explanation_payload_and_what_if(api, holdout_upload):
         "/api/whatif",
         json={"upload_id": upload, "row_number": 3, "column": "Col3", "value": "1680"},
     ).json()
-    assert changed["changed"] == {"column": "Col3", "value": "1680"}
+    assert changed["changed"] == {"column": "Col3", "value": "1680", "read_as": "1680.00"}
     assert abs(sum(changed["new_probabilities"].values()) - 1) < 1e-3
     bad = api.post(
         "/api/whatif",
@@ -492,3 +493,19 @@ def test_api_explanation_payload_and_what_if(api, holdout_upload):
     )
     assert bad.status_code == 422 and bad.json()["code"] == "AGENT_TOOL_ERROR"
     assert api.get(f"/api/explain/{upload}/9999").status_code == 422
+
+
+def test_dashboard_assets_are_served_with_script_and_style_types(api):
+    index = api.get("/")
+    if '<div id="root">' not in index.text:
+        pytest.skip("dashboard build not present")
+    scripts = re.findall(r'src="(/assets/[^"]+\.js)"', index.text)
+    styles = re.findall(r'href="(/assets/[^"]+\.css)"', index.text)
+    assert scripts and styles
+    assert api.get(scripts[0]).headers["content-type"].startswith("text/javascript")
+    assert api.get(styles[0]).headers["content-type"].startswith("text/css")
+
+
+def test_api_explanation_for_an_unknown_upload_is_not_found(api):
+    response = api.get("/api/explain/no-such-upload/1")
+    assert response.status_code == 404 and response.json()["code"] == "NOT_FOUND"

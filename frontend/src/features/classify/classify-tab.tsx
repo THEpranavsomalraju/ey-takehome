@@ -17,6 +17,7 @@ export function ClassifyTab() {
   const [busy, setBusy] = useState(false)
   const [query, setQuery] = useState<RowQuery>(EMPTY_QUERY)
   const [selected, setSelected] = useState<number | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
 
   const run = useCallback((request: () => Promise<Upload>) => {
     setBusy(true)
@@ -25,6 +26,7 @@ export function ClassifyTab() {
         setUpload(next)
         setQuery(EMPTY_QUERY)
         setSelected(null)
+        setDrawerOpen(false)
         toast.success(`${num(next.summary.rows)} rows classified in ${num(next.summary.timings_ms.total)} ms`)
       })
       .catch((e: Error) => toast.error(e.message, { duration: 10000 }))
@@ -92,17 +94,20 @@ export function ClassifyTab() {
       </div>
 
       <ResultsTable
-        key={`${upload.upload_id}:${query.label}:${query.flag}`}
+        key={upload.upload_id}
         uploadId={upload.upload_id}
         insights={insights}
         query={query}
         onQuery={setQuery}
         labeled={!!summary.metrics}
-        selectedRow={selected}
-        onSelect={setSelected}
+        selectedRow={drawerOpen ? selected : null}
+        onSelect={(row) => {
+          setSelected(row)
+          setDrawerOpen(true)
+        }}
       />
 
-      <RowSheet uploadId={upload.upload_id} row={selected} onClose={() => setSelected(null)} />
+      <RowSheet uploadId={upload.upload_id} row={selected} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
     </div>
   )
 }

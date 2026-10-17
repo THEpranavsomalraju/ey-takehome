@@ -28,8 +28,8 @@ export function useAsync<T>(key: string | null, load: () => Promise<T>): AsyncSt
     return () => {
       active = false
     }
-    // `load` is keyed by `key`; a new key means a new request.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `load` is keyed by `key`: a new key means a new request, so `load` is not a dependency.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [key])
 
   return state

@@ -25,10 +25,12 @@ import { cn } from "@/lib/utils"
 export function RowSheet({
   uploadId,
   row,
+  open,
   onClose,
 }: {
   uploadId: string
   row: number | null
+  open: boolean
   onClose: () => void
 }) {
   const key = `${uploadId}:${row}`
@@ -49,7 +51,7 @@ export function RowSheet({
   }, [uploadId, row, key])
 
   return (
-    <Sheet open={row != null} onOpenChange={(open) => !open && onClose()}>
+    <Sheet open={open && row != null} onOpenChange={(next) => !next && onClose()}>
       <SheetContent className="w-full gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl">
         <SheetHeader className="border-b px-6 py-4">
           <SheetTitle>Row {row}</SheetTitle>
@@ -376,9 +378,9 @@ function WhatIfSection({ uploadId, row, payload }: { uploadId: string; row: numb
         }}
       >
         <div className="space-y-1">
-          <Label className="text-xs">Input</Label>
+          <Label htmlFor="what-if-column" className="text-xs">Input</Label>
           <Select value={column} onValueChange={chooseColumn}>
-            <SelectTrigger size="sm" className="w-36 text-xs">
+            <SelectTrigger id="what-if-column" size="sm" className="w-36 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -430,7 +432,9 @@ function InputsSection({ payload }: { payload: ExplanationPayload }) {
         ))}
       </dl>
       <p className="text-xs text-muted-foreground">
-        Training covered {payload.context.period_range[0]} to {payload.context.period_range[1]}. This amount is higher than {pct(payload.context.amount_percentile, 0)} of training amounts.
+        Training covered {payload.context.period_range[0]} to {payload.context.period_range[1]}.
+        {payload.context.amount_percentile != null &&
+          ` This amount is higher than ${pct(payload.context.amount_percentile, 0)} of training amounts.`}
       </p>
     </section>
   )
