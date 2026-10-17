@@ -1,0 +1,11 @@
+transformer,group,features,rows_with_nonzero_share,mean_nonzero_per_row
+col1_tokens,Col1,536,1.0,3.9591260124317196
+col1_value,Col1,194,1.0,1.0
+col4_tokens,Col4,1491,1.0,2.746844980222264
+col6_tokens,Col6,274,1.0,3.7568280278771895
+col6_value,Col6,138,1.0,1.0
+pair,Col1+Col6,392,1.0,1.0
+col7,Col7,4,1.0,1.0
+amount,Col3,1,1.0,1.0
+amount_flags,Col3,2,0.37069127896025617,0.3714447165191185
+period,Col5,1,1.0,1.0

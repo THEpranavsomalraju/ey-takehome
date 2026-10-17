@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-import unicodedata
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -21,8 +20,9 @@ from ledgerclf.config import Limits
 from ledgerclf.exceptions import SchemaError
 from ledgerclf.values import (
     clean_text,
+    date_order_evidence,
     is_ambiguous_numeric_date,
-    numeric_date_first_part,
+    is_blank_cell,
     parse_amount,
     parse_date,
 )
@@ -120,12 +120,12 @@ class ValidationReport:
 
     def has_errors(self) -> bool:
         """Return True when any issue has ERROR severity."""
-        return any(issue.severity is Severity.ERROR for issue in self.issues)
+        return any(found.severity is Severity.ERROR for found in self.issues)
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-safe dict."""
         return {
-            "issues": [issue.to_dict() for issue in self.issues],
+            "issues": [found.to_dict() for found in self.issues],
             "rows_read": int(self.rows_read),
             "rows_dropped_empty": int(self.rows_dropped_empty),
             "rows_predicted": int(self.rows_predicted),
@@ -133,27 +133,50 @@ class ValidationReport:
         }
 
 
-def issue(
+def make_issue(
     severity: Severity,
     code: str,
     message: str,
     column: str | None = None,
     rows: Iterable[int] = (),
 ) -> ValidationIssue:
-    """Build a ValidationIssue with sorted, de-duplicated row numbers."""
+    """Build a ValidationIssue with sorted, de-duplicated row numbers.
+
+    Args:
+        severity: ERROR, WARNING, or INFO.
+        code: Stable machine-readable code.
+        message: Plain-English message, including the fix when one exists.
+        column: Canonical column the issue concerns, if any.
+        rows: Spreadsheet row numbers the issue concerns.
+
+    Returns:
+        The issue.
+    """
     return ValidationIssue(severity, code, message, column, tuple(sorted({int(r) for r in rows})))
 
 
 def normalize_header(value: object) -> str:
-    """Normalize a header cell for matching: lowercase, no spaces or separators."""
-    text, _ = clean_text(value, max_chars=200)
-    if text is None:
-        return ""
-    return _HEADER_STRIP.sub("", unicodedata.normalize("NFKC", text).lower())
+    """Normalize a header cell for matching: lowercase, no spaces or separators.
+
+    Args:
+        value: Raw header cell.
+
+    Returns:
+        The normalized text, or an empty string for blank cells.
+    """
+    text, _ = clean_text(value)
+    return "" if text is None else _HEADER_STRIP.sub("", text.lower())
 
 
 def canonical_header(value: object) -> str | None:
-    """Return the canonical column name for a header cell, or None."""
+    """Return the canonical column name for a header cell.
+
+    Args:
+        value: Raw header cell.
+
+    Returns:
+        ``Col1`` to ``Col7`` or the label column name, or None when unknown.
+    """
     return _HEADER_ALIASES.get(normalize_header(value))
 
 
@@ -198,24 +221,34 @@ def resolve_columns(
         )
     header_row = find_header_row(raw, limits)
     if header_row is None:
-        return _resolve_by_position(_trim_trailing_blank_columns(raw))
-    return _resolve_by_header(raw, header_row)
+        return _resolve_by_position(_trim_blank_edges(raw), limits)
+    return _resolve_by_header(raw, header_row, limits)
 
 
 def _is_blank(values: pd.Series) -> bool:
-    return bool(values.map(lambda v: clean_text(v, 10)[0] is None).all())
+    return bool(values.map(is_blank_cell).all())
 
 
-def _trim_trailing_blank_columns(raw: pd.DataFrame) -> pd.DataFrame:
-    """Drop blank columns at the right edge, such as those from a trailing delimiter."""
-    width = raw.shape[1]
-    while width > 0 and _is_blank(raw.iloc[:, width - 1]):
-        width -= 1
-    return raw.iloc[:, :width]
+def _trim_blank_edges(raw: pd.DataFrame) -> pd.DataFrame:
+    """Drop blank leading rows and blank leading or trailing columns.
+
+    Exports often start a block at C3 or end each line with a delimiter.
+    Interior blank columns stay, so positional mapping never shifts a real
+    column that happens to be empty. The row index (the 0-based sheet row)
+    is kept, so spreadsheet row numbers stay true.
+    """
+    columns = [c for c in raw.columns if not _is_blank(raw[c])]
+    if not columns:
+        return raw.iloc[:, :0]
+    first, last = list(raw.columns).index(columns[0]), list(raw.columns).index(columns[-1])
+    trimmed = raw.iloc[:, first : last + 1]
+    filled = ~trimmed.apply(lambda row: row.map(is_blank_cell).all(), axis=1)
+    start = int(np.argmax(filled.to_numpy())) if filled.any() else len(trimmed)
+    return trimmed.iloc[start:]
 
 
 def _resolve_by_header(
-    raw: pd.DataFrame, header_row: int
+    raw: pd.DataFrame, header_row: int, limits: Limits
 ) -> tuple[pd.DataFrame, dict[str, str], list[ValidationIssue]]:
     headers = raw.iloc[header_row].tolist()
     body = raw.iloc[header_row + 1 :]
@@ -223,17 +256,21 @@ def _resolve_by_header(
     chosen: dict[str, int] = {}
     extras: list[str] = []
     mapping: dict[str, str] = {}
+    ragged_rows: set[int] = set()
     for position, header in enumerate(headers):
         name = canonical_header(header)
-        label = clean_text(header, 200)[0] or ""
+        label = clean_text(header, limits.header_max_chars)[0] or ""
         if name is None:
             values = body.iloc[:, position]
-            if not (label == "" and _is_blank(values)) and not _is_index_artifact(label, values):
-                extras.append(label or f"(unnamed column {position + 1})")
+            if label == "" and not _is_blank(values):
+                filled = ~values.map(is_blank_cell).to_numpy()
+                ragged_rows.update((body.index[filled] + 1).tolist())
+            elif label != "" and not _is_index_artifact(label, values):
+                extras.append(label)
             continue
         if name in chosen:
             issues.append(
-                issue(
+                make_issue(
                     Severity.WARNING,
                     "DUPLICATE_COLUMN",
                     f"Column '{name}' appears more than once. The first occurrence was used.",
@@ -245,19 +282,64 @@ def _resolve_by_header(
         mapping[label] = name
     if extras:
         issues.append(
-            issue(
+            make_issue(
                 Severity.WARNING,
                 "EXTRA_COLUMNS_IGNORED",
                 "Ignored columns not used by the model: " + ", ".join(extras) + ".",
             )
         )
-    frame = _assemble(body, chosen, first_source_row=header_row + 2)
-    issues.extend(_check_required(frame, [str(h) for h in headers]))
+    if ragged_rows:
+        issues.append(_ragged_rows_issue(sorted(ragged_rows), limits))
+    _require_columns(chosen, headers, limits)
+    body, repeated = _drop_repeated_headers(body, chosen, limits)
+    if repeated:
+        issues.append(
+            make_issue(
+                Severity.WARNING,
+                "REPEATED_HEADER_ROWS",
+                "Skipped rows that repeat the header (files joined together): "
+                + _row_list(repeated, limits)
+                + ".",
+                rows=repeated,
+            )
+        )
+    frame = _assemble(body, chosen)
     return _with_optional(frame, issues), mapping, issues
 
 
+def _ragged_rows_issue(rows: list[int], limits: Limits) -> ValidationIssue:
+    return make_issue(
+        Severity.WARNING,
+        "ROW_HAS_EXTRA_FIELDS",
+        "These rows have more fields than the header: "
+        + _row_list(rows, limits)
+        + ". A value probably contains an unquoted delimiter (for example a vendor written as "
+        "Acme, Inc), so the values in these rows may sit in the wrong columns. Quote such "
+        "values or remove the extra delimiter, then upload again.",
+        rows=rows,
+    )
+
+
+def _drop_repeated_headers(
+    body: pd.DataFrame, chosen: dict[str, int], limits: Limits
+) -> tuple[pd.DataFrame, list[int]]:
+    """Remove body rows that are copies of the header row, returning their row numbers."""
+    probe = list(chosen.items())[:2]
+    candidates = np.zeros(len(body), dtype=bool)
+    for name, position in probe:
+        candidates |= body.iloc[:, position].map(canonical_header).eq(name).to_numpy()
+    if not candidates.any():
+        return body, []
+    repeated = np.zeros(len(body), dtype=bool)
+    for index in np.flatnonzero(candidates):
+        cells = body.iloc[index].tolist()
+        matches = sum(canonical_header(cells[p]) == n for n, p in chosen.items())
+        repeated[index] = matches >= limits.header_min_matches
+    return body.loc[~repeated], (body.index[repeated] + 1).tolist()
+
+
 def _resolve_by_position(
-    raw: pd.DataFrame,
+    raw: pd.DataFrame, limits: Limits
 ) -> tuple[pd.DataFrame, dict[str, str], list[ValidationIssue]]:
     width = raw.shape[1]
     if width == 0:
@@ -266,7 +348,8 @@ def _resolve_by_position(
             code="NO_DATA_ROWS",
         )
     if width not in (len(INPUT_COLUMNS), len(INPUT_COLUMNS) + 1):
-        first_row = ", ".join(str(clean_text(v, 40)[0]) for v in raw.iloc[0].tolist())
+        cells = [clean_text(v, limits.message_value_chars)[0] for v in raw.iloc[0].tolist()]
+        first_row = ", ".join(c for c in cells if c is not None)
         raise SchemaError(
             "Could not find a header row naming the input columns Col1 to Col7 "
             f"(found in the first row: {first_row}). Add a header row with Col1 to Col7 "
@@ -275,15 +358,52 @@ def _resolve_by_position(
         )
     names = [*INPUT_COLUMNS, LABEL_COLUMN][:width]
     chosen = {name: position for position, name in enumerate(names)}
-    frame = _assemble(raw, chosen, first_source_row=1)
+    issues = [
+        make_issue(
+            Severity.WARNING,
+            "POSITIONAL_MAPPING",
+            f"No header row found. Columns were mapped by position: first {len(INPUT_COLUMNS)} "
+            "to Col1 to Col7"
+            + (", the last to the label" if width > len(INPUT_COLUMNS) else "")
+            + ".",
+        )
+    ]
+    if _first_row_looks_like_header(raw, chosen):
+        header_row = int(raw.index[0]) + 1
+        names_found = ", ".join(
+            str(clean_text(v, limits.message_value_chars)[0]) for v in raw.iloc[0]
+        )
+        issues.append(
+            make_issue(
+                Severity.WARNING,
+                "HEADER_NOT_RECOGNIZED",
+                f"Row {header_row} looks like a header ({names_found}) but its names do not "
+                "match Col1 to Col7, so it was skipped. Rename the headers to Col1 to Col7 "
+                "(or A to G) to map columns by name instead of position.",
+                rows=[header_row],
+            )
+        )
+        raw = raw.iloc[1:]
+    frame = _assemble(raw, chosen)
     mapping = {f"position {p + 1}": n for n, p in chosen.items()}
-    warning = issue(
-        Severity.WARNING,
-        "POSITIONAL_MAPPING",
-        f"No header row found. Columns were mapped by position: first {len(INPUT_COLUMNS)} "
-        "to Col1 to Col7" + (", the last to the label" if width > len(INPUT_COLUMNS) else "") + ".",
-    )
-    return frame, mapping, [warning]
+    return frame, mapping, issues
+
+
+def _first_row_looks_like_header(raw: pd.DataFrame, chosen: dict[str, int]) -> bool:
+    """Return True when row 1 has text where every later row has an amount and a date."""
+    if len(raw) < 2:
+        return False
+    amount_at, period_at = chosen[COL_AMOUNT], chosen[COL_PERIOD]
+
+    def parses(row: pd.Series) -> bool:
+        has_amount = parse_amount(row.iloc[amount_at]) is not None
+        return has_amount or parse_date(row.iloc[period_at], day_first=False) is not None
+
+    first = raw.iloc[0]
+    if parses(first) or any(is_blank_cell(v) for v in first):
+        return False
+    rest = raw.iloc[1:]
+    return bool(rest.apply(parses, axis=1).mean() >= 0.5)
 
 
 def _is_index_artifact(label: str, values: pd.Series) -> bool:
@@ -296,26 +416,41 @@ def _is_index_artifact(label: str, values: pd.Series) -> bool:
     return bool((numbers.to_numpy() == np.arange(start, start + len(numbers))).all())
 
 
-def _assemble(body: pd.DataFrame, chosen: dict[str, int], first_source_row: int) -> pd.DataFrame:
+def _assemble(body: pd.DataFrame, chosen: dict[str, int]) -> pd.DataFrame:
+    """Select the chosen columns; ``source_row`` is the 1-based sheet row from the index."""
     data = {
         name: body.iloc[:, position].to_numpy(dtype=object) for name, position in chosen.items()
     }
     frame = pd.DataFrame(data, dtype=object)
-    frame.insert(0, SOURCE_ROW, np.arange(first_source_row, first_source_row + len(body)))
+    frame.insert(0, SOURCE_ROW, np.asarray(body.index, dtype=np.int64) + 1)
     return frame
 
 
-def _check_required(frame: pd.DataFrame, headers: list[str]) -> list[ValidationIssue]:
-    missing = [c for c in REQUIRED_COLUMNS if c not in frame.columns]
-    if missing:
-        found = [h for h in headers if clean_text(h, 200)[0] is not None]
-        raise SchemaError(
-            f"Missing required columns: {', '.join(missing)}. "
-            f"Found columns: {', '.join(found) or 'none'}. Rename the columns to match "
-            "Col1 to Col7, or upload a file with all seven input columns.",
-            code="MISSING_REQUIRED_COLUMNS",
-        )
-    return []
+def _require_columns(chosen: dict[str, int], headers: list[object], limits: Limits) -> None:
+    missing = [c for c in REQUIRED_COLUMNS if c not in chosen]
+    if not missing:
+        return
+    cleaned = [clean_text(h, limits.header_max_chars)[0] for h in headers]
+    found = [h for h in cleaned if h is not None]
+    raise SchemaError(
+        f"Missing required columns: {', '.join(missing)}. "
+        f"Found columns: {', '.join(found) or 'none'}. Rename the columns to match "
+        "Col1 to Col7, or upload a file with all seven input columns." + _lookalike_hint(found),
+        code="MISSING_REQUIRED_COLUMNS",
+    )
+
+
+def _lookalike_hint(headers: list[str]) -> str:
+    """Explain headers that contain non-ASCII characters resembling Latin letters."""
+    hints = []
+    for header in headers:
+        odd = [ch for ch in header if not ch.isascii()]
+        if odd:
+            codes = ", ".join(f"'{ch}' (U+{ord(ch):04X})" for ch in odd)
+            hints.append(f"Header '{header}' contains the non-ASCII character {codes}")
+    if not hints:
+        return ""
+    return " " + "; ".join(hints) + ", which only looks like a Latin letter. Retype it."
 
 
 def _with_optional(frame: pd.DataFrame, issues: list[ValidationIssue]) -> pd.DataFrame:
@@ -323,7 +458,7 @@ def _with_optional(frame: pd.DataFrame, issues: list[ValidationIssue]) -> pd.Dat
         frame = frame.copy()
         frame.insert(1, COL_INVOICE, None)
         issues.append(
-            issue(
+            make_issue(
                 Severity.WARNING,
                 "OPTIONAL_COLUMN_MISSING",
                 "Column Col2 (invoice number) is missing. Predictions do not use Col2, "
@@ -355,27 +490,28 @@ def coerce_values(
     Raises:
         SchemaError: When no non-empty data rows remain.
     """
-    issues: list[ValidationIssue] = []
     out = pd.DataFrame({SOURCE_ROW: frame[SOURCE_ROW].to_numpy(dtype=np.int64)})
-    truncated = np.zeros(len(frame), dtype=bool)
+    truncated_columns: dict[str, np.ndarray] = {}
     for column in TEXT_COLUMNS:
         cleaned = [clean_text(v, limits.max_text_chars) for v in frame[column].tolist()]
         out[column] = pd.Series([c[0] for c in cleaned], dtype=object)
-        truncated |= np.array([c[1] for c in cleaned], dtype=bool)
+        truncated_columns[column] = np.array([c[1] for c in cleaned], dtype=bool)
     out[COL_DOC_TYPE] = out[COL_DOC_TYPE].map(_canonical_doc_type).astype(object)
     out[AMOUNT] = _coerce_amounts(frame[COL_AMOUNT])
-    out[PERIOD], out[COL_PERIOD], date_issues = _coerce_periods(frame[COL_PERIOD])
+    out[PERIOD], out[COL_PERIOD], date_issues = _coerce_periods(frame[COL_PERIOD], limits)
     if LABEL_COLUMN in frame.columns:
         out[LABEL_COLUMN] = pd.Series(
-            [clean_text(v, 200)[0] for v in frame[LABEL_COLUMN]], dtype=object
+            [clean_text(v, limits.header_max_chars)[0] for v in frame[LABEL_COLUMN]], dtype=object
         )
-    out[COL_AMOUNT] = _amount_display(frame[COL_AMOUNT], out[AMOUNT])
-    out[TEXT_TRUNCATED] = truncated
+    out[COL_AMOUNT] = _amount_display(frame[COL_AMOUNT], out[AMOUNT], limits)
+    out[TEXT_TRUNCATED] = np.any(list(truncated_columns.values()), axis=0)
+    truncated_columns = {c: m for c, m in truncated_columns.items() if m.any()}
     out, empty_rows = _drop_empty_rows(out, frame)
     out[AMOUNT_WAS_MISSING] = out[AMOUNT].isna().to_numpy()
     out[PERIOD_WAS_MISSING] = out[PERIOD].isna().to_numpy()
-    issues.extend(_row_issues(out, empty_rows, date_issues))
-    return _ordered(out), issues
+    issues = _row_issues(out, empty_rows, limits)
+    issues.extend(_truncation_issues(out, sorted(truncated_columns), limits))
+    return _ordered(out), [*issues, *date_issues]
 
 
 def _canonical_doc_type(value: object) -> object:
@@ -389,30 +525,44 @@ def _coerce_amounts(values: pd.Series) -> pd.Series:
     return pd.Series([np.nan if p is None else p for p in parsed], dtype=np.float64)
 
 
-def _amount_display(raw: pd.Series, parsed: pd.Series) -> pd.Series:
+def _amount_display(raw: pd.Series, parsed: pd.Series, limits: Limits) -> pd.Series:
     display: list[str | None] = []
     for raw_value, number in zip(raw.tolist(), parsed.tolist(), strict=True):
         if not np.isnan(number):
             display.append(f"{number:.2f}")
         else:
-            display.append(clean_text(raw_value, 100)[0])
+            display.append(clean_text(raw_value, limits.max_text_chars)[0])
     return pd.Series(display, dtype=object)
 
 
-def _coerce_periods(values: pd.Series) -> tuple[pd.Series, pd.Series, list[ValidationIssue]]:
+def _coerce_periods(
+    values: pd.Series, limits: Limits
+) -> tuple[pd.Series, pd.Series, list[ValidationIssue]]:
     raw = values.tolist()
-    first_parts = [p for p in (numeric_date_first_part(v) for v in raw) if p is not None]
-    day_first = any(part > 12 for part in first_parts)
+    evidence = [date_order_evidence(v) for v in raw]
+    day_votes, month_votes = evidence.count("day_first"), evidence.count("month_first")
+    day_first = day_votes > month_votes
     parsed = [parse_date(v, day_first=day_first) for v in raw]
     periods = pd.Series([np.nan if p is None else float(p.period_index) for p in parsed])
     display = [
-        p.label if p is not None else clean_text(v, 100)[0]
+        p.label if p is not None else clean_text(v, limits.max_text_chars)[0]
         for p, v in zip(parsed, raw, strict=True)
     ]
-    issues = []
-    if not day_first and any(is_ambiguous_numeric_date(v) for v in raw):
+    issues: list[ValidationIssue] = []
+    if day_votes and month_votes:
         issues.append(
-            issue(
+            make_issue(
+                Severity.WARNING,
+                "DATE_ORDER_MIXED",
+                f"Col5 mixes day-first dates ({day_votes} rows such as 31/08/2018) and "
+                f"month-first dates ({month_votes} rows such as 08/31/2018). The column was read "
+                f"{'day' if day_first else 'month'} first; check dates such as 03/04/2018.",
+                column=COL_PERIOD,
+            )
+        )
+    elif not day_first and any(is_ambiguous_numeric_date(v) for v in raw):
+        issues.append(
+            make_issue(
                 Severity.INFO,
                 "DATE_ORDER_ASSUMED_MONTH_FIRST",
                 "Dates such as 03/04/2018 were read month first (March 4). No date in Col5 "
@@ -426,8 +576,8 @@ def _coerce_periods(values: pd.Series) -> tuple[pd.Series, pd.Series, list[Valid
 def _drop_empty_rows(out: pd.DataFrame, frame: pd.DataFrame) -> tuple[pd.DataFrame, list[int]]:
     input_cols = [c for c in INPUT_COLUMNS if c not in (COL_AMOUNT, COL_PERIOD)]
     text_empty = out[input_cols].isna().all(axis=1).to_numpy()
-    raw_amount_empty = frame[COL_AMOUNT].map(lambda v: clean_text(v, 10)[0] is None).to_numpy()
-    raw_period_empty = frame[COL_PERIOD].map(lambda v: clean_text(v, 10)[0] is None).to_numpy()
+    raw_amount_empty = frame[COL_AMOUNT].map(is_blank_cell).to_numpy()
+    raw_period_empty = frame[COL_PERIOD].map(is_blank_cell).to_numpy()
     empty = text_empty & raw_amount_empty & raw_period_empty
     dropped = out.loc[empty, SOURCE_ROW].tolist()
     kept = out.loc[~empty].reset_index(drop=True)
@@ -440,17 +590,15 @@ def _drop_empty_rows(out: pd.DataFrame, frame: pd.DataFrame) -> tuple[pd.DataFra
     return kept, dropped
 
 
-def _row_issues(
-    out: pd.DataFrame, empty_rows: list[int], date_issues: list[ValidationIssue]
-) -> list[ValidationIssue]:
+def _row_issues(out: pd.DataFrame, empty_rows: list[int], limits: Limits) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     if empty_rows:
         issues.append(
-            issue(
+            make_issue(
                 Severity.WARNING,
                 "EMPTY_ROWS_DROPPED",
                 f"Dropped {len(empty_rows)} empty row(s). Spreadsheet rows: "
-                + _row_list(empty_rows)
+                + _row_list(empty_rows, limits)
                 + ".",
                 rows=empty_rows,
             )
@@ -458,11 +606,11 @@ def _row_issues(
     bad_amounts = out.loc[out[AMOUNT].isna(), SOURCE_ROW].tolist()
     if bad_amounts:
         issues.append(
-            issue(
+            make_issue(
                 Severity.WARNING,
                 "AMOUNT_UNPARSEABLE",
                 f"{len(bad_amounts)} amount(s) in Col3 were missing or unreadable and were "
-                "replaced by the training median. Rows: " + _row_list(bad_amounts) + ".",
+                "replaced by the training median. Rows: " + _row_list(bad_amounts, limits) + ".",
                 column=COL_AMOUNT,
                 rows=bad_amounts,
             )
@@ -470,31 +618,37 @@ def _row_issues(
     bad_dates = out.loc[out[PERIOD].isna(), SOURCE_ROW].tolist()
     if bad_dates:
         issues.append(
-            issue(
+            make_issue(
                 Severity.WARNING,
                 "DATE_UNPARSEABLE",
                 f"{len(bad_dates)} date(s) in Col5 were missing or unreadable and were replaced "
-                "by the training median period. Rows: " + _row_list(bad_dates) + ".",
+                "by the training median period. Rows: " + _row_list(bad_dates, limits) + ".",
                 column=COL_PERIOD,
                 rows=bad_dates,
             )
         )
+    return issues
+
+
+def _truncation_issues(
+    out: pd.DataFrame, columns: list[str], limits: Limits
+) -> list[ValidationIssue]:
     truncated = out.loc[out[TEXT_TRUNCATED], SOURCE_ROW].tolist()
-    if truncated:
-        issues.append(
-            issue(
-                Severity.INFO,
-                "TEXT_TRUNCATED",
-                f"{len(truncated)} row(s) had text longer than the limit; it was truncated.",
-                rows=truncated,
-            )
-        )
-    return [*issues, *date_issues]
+    if not truncated:
+        return []
+    message = (
+        f"{len(truncated)} row(s) had text longer than {limits.max_text_chars} characters in "
+        f"{', '.join(columns)}; only the first {limits.max_text_chars} characters were used. "
+        "Rows: " + _row_list(truncated, limits) + "."
+    )
+    return [make_issue(Severity.INFO, "TEXT_TRUNCATED", message, rows=truncated)]
 
 
-def _row_list(rows: list[int], limit: int = 10) -> str:
-    shown = ", ".join(str(r) for r in rows[:limit])
-    return shown + (f" and {len(rows) - limit} more" if len(rows) > limit else "")
+def _row_list(rows: list[int], limits: Limits) -> str:
+    shown_count = limits.issue_rows_shown
+    shown = ", ".join(str(r) for r in rows[:shown_count])
+    extra = len(rows) - shown_count
+    return shown + (f" and {extra} more" if extra > 0 else "")
 
 
 def _ordered(out: pd.DataFrame) -> pd.DataFrame:

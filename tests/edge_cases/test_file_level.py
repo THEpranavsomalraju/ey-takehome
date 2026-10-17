@@ -136,9 +136,10 @@ def test_f11_data_on_second_sheet_is_selected():
 def test_f12_title_rows_above_header_are_skipped():
     rows = [["Ledger export"], ["Generated 2018-12-31"], [], list(INPUT_COLUMNS), *SAMPLE_ROWS]
     frame, _, info = process(csv_bytes(rows, header=None), "titled.csv")
-    assert info.header_row_index == 2
+    assert info.header_row_index == 3  # the blank line is kept, so row numbers stay true
     assert len(frame) == len(SAMPLE_ROWS)
     assert frame.loc[0, "Col1"] == SAMPLE_ROWS[0][0]
+    assert frame.loc[0, "source_row"] == 5
 
 
 def test_f13_original_raw_file_reads_with_labels(settings):
@@ -178,3 +179,34 @@ def test_f16_xlsm_reads_like_xlsx():
     assert info.detected_format == "xlsx"
     assert "EXTENSION_MISMATCH" not in codes(issues)
     assert len(frame) == len(SAMPLE_ROWS)
+
+
+def test_f06_row_limit_counts_data_rows_only():
+    small = Limits(max_rows=3)
+    process_rows = csv_bytes(SAMPLE_ROWS)
+    raw, info, _ = read_table(process_rows, "three.csv", small)
+    assert len(raw) == 4 and info.header_row_index == 0
+    with pytest.raises(FileReadError) as caught:
+        read_table(csv_bytes(SAMPLE_ROWS + SAMPLE_ROWS[:1]), "four.csv", small)
+    assert caught.value.code == "TOO_MANY_ROWS"
+
+
+def test_f01_missing_path_gives_clear_error(tmp_path):
+    with pytest.raises(FileReadError) as caught:
+        read_table(tmp_path / "nope.csv", "nope.csv", LIMITS)
+    assert caught.value.code == "FILE_NOT_FOUND"
+
+
+def test_f07_utf16_without_bom_reads():
+    data = csv_bytes(ACCENTED_ROWS, encoding="utf-16-le")
+    frame, _, info = process(data, "utf16le.csv")
+    reference, _, _ = process(csv_bytes(ACCENTED_ROWS), "ref.csv")
+    assert info.encoding == "utf-16-le"
+    pd.testing.assert_frame_equal(frame, reference)
+
+
+def test_f09_stray_nul_characters_are_removed_with_warning():
+    data = csv_bytes(SAMPLE_ROWS).replace(b"Word61", b"Word\x0061")
+    frame, issues, _ = process(data, "nul.csv")
+    assert "NUL_BYTES_REMOVED" in codes(issues)
+    assert frame.loc[0, "Col4"] == "Word61"

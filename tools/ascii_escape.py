@@ -32,7 +32,7 @@ def escape(text: str) -> str:
 
 def main() -> int:
     """Escape every non-ASCII Python source under the given paths."""
-    targets = [Path(p) for p in sys.argv[1:]] or [ROOT / d for d in DEFAULT_DIRS]
+    targets = [Path(p).resolve() for p in sys.argv[1:]] or [ROOT / d for d in DEFAULT_DIRS]
     files = [f for t in targets for f in ([t] if t.is_file() else sorted(t.rglob("*.py")))]
     for path in files:
         text = path.read_text(encoding="utf-8")

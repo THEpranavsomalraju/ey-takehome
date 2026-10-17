@@ -34,8 +34,19 @@ HOLDOUT_SENSITIVE = (
     "holdout_with_labels",
     "read_holdout_labels",
     "issue_holdout_token",
+    "HoldoutAccessToken",
+    "_issuer_key",
+    "load_labeled_raw",
+    "paths.raw_data",
 )
-HOLDOUT_ALLOWED = ("ledgerclf/splitting.py", "ledgerclf/cli.py", "ledgerclf/holdout_eval.py")
+# eda.py reads the raw file for the label-free schema audit and the raw label mapping,
+# both sanctioned on the full file (docs/03 Phase 2 step 1, DECISIONS.md D26).
+HOLDOUT_ALLOWED = (
+    "ledgerclf/splitting.py",
+    "ledgerclf/cli.py",
+    "ledgerclf/holdout_eval.py",
+    "ledgerclf/eda.py",
+)
 SCANNED_DIRS = ("ledgerclf", "tools", "notebooks", "research", "dashboard")
 
 
@@ -49,16 +60,19 @@ class Outcome:
 
 def _run(command: list[str], timeout: int = 1800) -> Outcome:
     started = time.time()
-    completed = subprocess.run(
-        command,
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=timeout,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return Outcome("FAIL", f"timed out after {timeout}s")
     seconds = time.time() - started
     if completed.returncode == 0:
         return Outcome("PASS", f"{seconds:.0f}s")
@@ -163,6 +177,8 @@ def check_notebooks() -> Outcome:
 
 def check_golden() -> Outcome:
     """Check 12: predictions match the golden file on this machine."""
+    if not (ROOT / "artifacts" / "golden_holdout_predictions.csv").exists():
+        return Outcome("SKIP", "golden file not built yet (Phase 6)")
     return _run(_python("tools/compare_golden.py", "--tolerance", "same-machine"))
 
 
@@ -259,23 +275,24 @@ def check_holdout_guard() -> Outcome:
     return Outcome("PASS", "holdout labels referenced only by guarded code and tests")
 
 
-FAST_CHECKS: list[tuple[str, Callable[[], Outcome]]] = [
-    ("1 formatting", check_format),
-    ("2 lint", check_lint),
-    ("3 types", check_types),
-    ("4 tests (not slow)", check_fast_tests),
-    ("6 portability", check_portability),
-    ("7 doctor", check_doctor),
-    ("8 edge-case coverage", check_edge_coverage),
-    ("10 manifest integrity", check_manifest),
-    ("13 hygiene", check_hygiene),
-    ("14 holdout guard", check_holdout_guard),
+Check = tuple[int, str, Callable[[], Outcome]]
+FAST_CHECKS: list[Check] = [
+    (1, "formatting", check_format),
+    (2, "lint", check_lint),
+    (3, "types", check_types),
+    (4, "tests (not slow)", check_fast_tests),
+    (6, "portability", check_portability),
+    (7, "doctor", check_doctor),
+    (8, "edge-case coverage", check_edge_coverage),
+    (10, "manifest integrity", check_manifest),
+    (13, "hygiene", check_hygiene),
+    (14, "holdout guard", check_holdout_guard),
 ]
-FULL_ONLY: list[tuple[str, Callable[[], Outcome]]] = [
-    ("5 all tests + coverage", check_full_tests),
-    ("9 reference ranges", check_reference_ranges),
-    ("11 notebooks", check_notebooks),
-    ("12 golden predictions", check_golden),
+FULL_ONLY: list[Check] = [
+    (5, "all tests + coverage", check_full_tests),
+    (9, "reference ranges", check_reference_ranges),
+    (11, "notebooks", check_notebooks),
+    (12, "golden predictions", check_golden),
 ]
 
 
@@ -286,15 +303,13 @@ def main() -> int:
     args = parser.parse_args()
     checks = list(FAST_CHECKS)
     if args.full:
-        checks = [c for c in checks if not c[0].startswith("4 ")]
-        checks.extend(FULL_ONLY)
-        checks.sort(key=lambda item: int(item[0].split()[0]))
+        checks = sorted([c for c in checks if c[0] != 4] + FULL_ONLY, key=lambda c: c[0])
     started = time.time()
     failures = 0
-    for name, check in checks:
+    for number, name, check in checks:
         outcome = check()
         failures += outcome.status == "FAIL"
-        print(f"{outcome.status:<4}  {name}  {outcome.detail}", flush=True)
+        print(f"{outcome.status:<4}  {number} {name}  {outcome.detail}", flush=True)
     mode = "full" if args.full else "fast"
     verdict = "PASS" if failures == 0 else f"FAIL ({failures} failing)"
     print(f"\nGate ({mode}): {verdict} in {time.time() - started:.0f}s", flush=True)

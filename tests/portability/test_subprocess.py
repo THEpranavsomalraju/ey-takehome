@@ -49,7 +49,7 @@ def test_cli_output_survives_cp1252_console(tmp_path):
 def test_every_module_imports_with_lightgbm_blocked():
     modules = sorted(p.stem for p in (ROOT / "ledgerclf").glob("*.py") if p.stem != "__main__")
     script = BLOCK_LIGHTGBM + "".join(f"import ledgerclf.{name}\n" for name in modules)
-    script += "import importlib.util\nassert 'lightgbm' not in sys.modules\nprint('ok')\n"
+    script += "assert 'lightgbm' not in sys.modules\nprint('ok')\n"
     completed = _run([sys.executable, "-c", script], cwd=ROOT)
     assert completed.returncode == 0, completed.stderr.decode("utf-8", "replace")
     assert completed.stdout.strip() == b"ok"

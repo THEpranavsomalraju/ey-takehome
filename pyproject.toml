@@ -26,6 +26,8 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "N", "D", "RUF"]
 ignore = [
     "D105",    # magic methods are self-describing
     "D107",    # __init__ documented on the class
+    "N803",    # X for feature matrices follows the scikit-learn estimator convention
+    "N806",
     "RUF001",  # ambiguous unicode in strings: escapes are used deliberately in tests
     "RUF002",
     "RUF003",

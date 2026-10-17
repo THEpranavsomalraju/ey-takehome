@@ -1,0 +1,83 @@
+{
+  "column_details": {
+    "ClassificationLabel": {
+      "inferred_role": "Target",
+      "missing": 0,
+      "python_types": {
+        "str": 5899
+      },
+      "unique": 11
+    },
+    "Col1": {
+      "inferred_role": "Vendor name",
+      "missing": 0,
+      "python_types": {
+        "str": 5899
+      },
+      "unique": 313
+    },
+    "Col2": {
+      "inferred_role": "Invoice number",
+      "missing": 0,
+      "python_types": {
+        "float": 3,
+        "int": 3526,
+        "str": 2370
+      },
+      "unique": 4818
+    },
+    "Col3": {
+      "inferred_role": "Amount",
+      "missing": 0,
+      "python_types": {
+        "float": 2383,
+        "int": 3516
+      },
+      "unique": 2397
+    },
+    "Col4": {
+      "inferred_role": "Line description",
+      "missing": 153,
+      "python_types": {
+        "str": 5746
+      },
+      "unique": 2032
+    },
+    "Col5": {
+      "inferred_role": "Posting period",
+      "missing": 0,
+      "python_types": {
+        "datetime": 5899
+      },
+      "unique": 17
+    },
+    "Col6": {
+      "inferred_role": "GL account name",
+      "missing": 0,
+      "python_types": {
+        "str": 5899
+      },
+      "unique": 196
+    },
+    "Col7": {
+      "inferred_role": "Document flag",
+      "missing": 0,
+      "python_types": {
+        "str": 5899
+      },
+      "unique": 4
+    }
+  },
+  "columns": [
+    "Col1",
+    "Col2",
+    "Col3",
+    "Col4",
+    "Col5",
+    "Col6",
+    "Col7",
+    "ClassificationLabel"
+  ],
+  "note": "Roles are working hypotheses from value patterns; the file names only Col1 to Col7.",
+  "rows": 5899
+}

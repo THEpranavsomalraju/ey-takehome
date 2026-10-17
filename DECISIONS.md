@@ -60,7 +60,7 @@ Consequences: honest estimates. Holdout size lands near 10% instead of exactly 1
 
 ## D03. Holdout seed rule (finishing item E)
 
-Status: Pending (Phase 1). Rule fixed now, result recorded after running.
+Status: Accepted. Rule fixed before the split (commit c732a06); result recorded below.
 
 Decision: iterate seeds 0 to 99 of `StratifiedGroupKFold(n_splits=10, shuffle=True)`, take the first split as holdout, accept the first seed where: holdout size 580 to 600, at least one row of each of Category_3, Category_4, Category_6, zero rows of Category_5, Category_1 and Category_2 shares within 0.01 of the full file. The rule uses label counts only, never model results.
 
@@ -68,7 +68,7 @@ Rationale: C5 has 2 rows, so both stay in training. Rare classes need at least o
 
 Evidence (exploration): seed 0 qualifies (590 rows: C1 522, C2 63, C3 1, C4 1, C5 0, C6 3).
 
-Result: (fill in after Phase 1: seed, counts, manifest hash)
+Result (2026-10-17, build group key from D22): seed 0 accepted on the first try. Holdout 590 rows: C1 521, C2 63, C3 3, C4 2, C5 0, C6 1 (C1 share 0.8831 vs 0.8840 overall, C2 0.1068 vs 0.1070). Training 5,309 rows: C1 4,694, C2 568, C3 20, C4 14, C5 2, C6 11. Groups: 3,945 training, 435 holdout, none shared. `holdout_row_ids.csv` sha256 a524a97f751dadf3cd9518eebcd23fbd087c42293511e32a014f947e6dc31b6f. The composition differs from the exploration counts above because the build key groups by monthly period (D22); with the date-level key, seed 0 reproduces the exploration counts exactly (verified by the leakage audit). `split` refuses to change a persisted split unless run with `--force`, and `load_split` verifies the stored hashes.
 
 ## D04. Drop Col2 from the model
 
@@ -262,7 +262,7 @@ Alternatives: full-date key (reproduces the docs/01 count, but lets 11 feature-i
 
 Evidence: tests/unit/test_splitting.py checks both counts (1,508 at date level from the raw file, 1,519 with the build key).
 
-Consequences: slightly stricter grouping. The holdout seed rule (D03) runs unchanged on these groups.
+Consequences: slightly stricter grouping. The holdout seed rule (D03) runs unchanged on these groups; seed 0 still qualifies, with a different rare-class composition than the date-level exploration (C3 3, C4 2, C6 1 instead of C3 1, C4 1, C6 3).
 
 ## D23. Pin pandas 2.3.3 instead of pandas 3.0.4
 
@@ -298,4 +298,24 @@ Status: Accepted (user approval)
 
 Context: edge case F13 scores the full raw file, which contains holdout rows with labels, and `holdout_with_labels.xlsx` exists for dashboard demos. CLAUDE.md rule 1 reserves holdout labels for `evaluate-holdout`.
 
-Decision: before the holdout evaluation, tests that touch labeled files containing holdout rows assert structure only (row counts, presence of metric keys), never metric values. No report or decision uses them. `holdout_with_labels.xlsx` joins `holdout_labels.csv` in the gate's holdout guard grep.
+Decision: before the holdout evaluation, tests that touch labeled files containing holdout rows assert structure only (row counts, presence of metric keys), never metric values. No report or decision uses them. `holdout_with_labels.xlsx` joins `holdout_labels.csv` in the gate's holdout guard grep, together with `load_labeled_raw`, direct reads of `paths.raw_data`, and the token internals; only `splitting.py`, `cli.py`, the holdout evaluation module, and `eda.py` (label-free schema audit and raw label mapping on the full file, sanctioned by docs/03 Phase 2) may use them. Two documents show holdout class counts outside `reports/holdout/` by design: `split_manifest.json` (docs/04 section 2.2) and the full-file raw label mapping. Both hold counts only, never metrics or predictions.
+
+## D27. European number format only when unambiguous
+
+Status: Accepted
+
+Context: docs/05 section 2.5 treats `^\d{1,3}(\.\d{3})+(,\d+)?$` as European notation, so `12.500` and `1.234` read as 12,500 and 1,234, which is 1000 times too large for a dot-decimal file with three decimals (code review finding).
+
+Decision: read European notation only with a decimal comma (`1.234,56`) or two or more dot groups (`1.234.567`). `1.234` and `12.500` stay dot-decimal numbers.
+
+Evidence: tests/unit/test_values.py (`1.234`, `12.500`, `1.234.567`, `1.234,56`), tests/adversarial/test_value_parsing.py::test_three_decimal_amount_in_dot_decimal_column_keeps_magnitude.
+
+## D28. Day-first date inference counts only valid dates
+
+Status: Accepted
+
+Context: docs/05 section 2.5 reads a column day-first when any value has a first part above 12. One typo (`45/08/2018`) would then silently flip every other date in the column (edge-case breaker finding).
+
+Decision: a value counts as day-first evidence only when it is a valid day-first date (`31/08/2018`), and as month-first evidence only when it is a valid month-first date (`08/31/2018`). The majority wins; mixed evidence raises the WARNING `DATE_ORDER_MIXED`. Without evidence the column reads month-first with the INFO issue `DATE_ORDER_ASSUMED_MONTH_FIRST`, as before.
+
+Evidence: tests/adversarial/test_value_parsing.py::test_invalid_date_does_not_flip_other_rows_to_day_first, tests/edge_cases/test_value_level.py::test_v12_*.

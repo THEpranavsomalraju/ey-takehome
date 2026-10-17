@@ -1,0 +1,122 @@
+{
+  "coerced": {
+    "columns": [
+      "row_id",
+      "row_number",
+      "source_row",
+      "Col1",
+      "Col2",
+      "Col3",
+      "Col4",
+      "Col5",
+      "Col6",
+      "Col7",
+      "ClassificationLabel",
+      "amount",
+      "period",
+      "amount_was_missing",
+      "period_was_missing",
+      "text_truncated"
+    ],
+    "dtypes": {
+      "ClassificationLabel": "object",
+      "Col1": "object",
+      "Col2": "object",
+      "Col3": "object",
+      "Col4": "object",
+      "Col5": "object",
+      "Col6": "object",
+      "Col7": "object",
+      "amount": "float64",
+      "amount_was_missing": "bool",
+      "period": "float64",
+      "period_was_missing": "bool",
+      "row_id": "int64",
+      "row_number": "int64",
+      "source_row": "int64",
+      "text_truncated": "bool"
+    },
+    "missing": {
+      "ClassificationLabel": 0,
+      "Col1": 0,
+      "Col2": 0,
+      "Col3": 0,
+      "Col4": 145,
+      "Col5": 0,
+      "Col6": 0,
+      "Col7": 0,
+      "amount": 0,
+      "amount_was_missing": 0,
+      "period": 0,
+      "period_was_missing": 0,
+      "row_id": 0,
+      "row_number": 0,
+      "source_row": 0,
+      "text_truncated": 0
+    },
+    "rows": 5309,
+    "scope": "training portion"
+  },
+  "matrix": {
+    "density": 0.005550360612281665,
+    "features": 3033,
+    "format": "scipy CSR (sparse)",
+    "rows": 5309,
+    "scope": "training portion",
+    "stored_values": 89373
+  },
+  "resolved": {
+    "blank_cells": {
+      "Col1": 0,
+      "Col2": 0,
+      "Col3": 0,
+      "Col4": 145,
+      "Col5": 0,
+      "Col6": 0,
+      "Col7": 0,
+      "source_row": 0
+    },
+    "columns": [
+      "source_row",
+      "Col1",
+      "Col2",
+      "Col3",
+      "Col4",
+      "Col5",
+      "Col6",
+      "Col7"
+    ],
+    "python_types": {
+      "Col1": {
+        "str": 5309
+      },
+      "Col2": {
+        "float": 3,
+        "int": 3195,
+        "str": 2111
+      },
+      "Col3": {
+        "float": 2148,
+        "int": 3161
+      },
+      "Col4": {
+        "float": 145,
+        "str": 5164
+      },
+      "Col5": {
+        "datetime": 5309
+      },
+      "Col6": {
+        "str": 5309
+      },
+      "Col7": {
+        "str": 5309
+      },
+      "source_row": {
+        "int": 5309
+      }
+    },
+    "rows": 5309,
+    "scope": "training portion, original cells"
+  }
+}

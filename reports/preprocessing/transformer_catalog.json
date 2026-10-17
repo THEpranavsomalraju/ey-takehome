@@ -1,0 +1,333 @@
+{
+  "dropped": {
+    "Col2": "Invoice number: display only (D04)."
+  },
+  "transformers": [
+    {
+      "columns": "Col1",
+      "decision": "D05",
+      "name": "col1_tokens",
+      "reason": "Vendor tokens carry identity; one vectorizer per column keeps roles apart.",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "TfidfVectorizer",
+          "params": {
+            "analyzer": "word",
+            "binary": false,
+            "decode_error": "strict",
+            "dtype": "<class 'numpy.float64'>",
+            "encoding": "utf-8",
+            "input": "content",
+            "lowercase": false,
+            "max_df": 1.0,
+            "max_features": null,
+            "min_df": 1,
+            "ngram_range": "(1, 1)",
+            "norm": "l2",
+            "preprocessor": null,
+            "smooth_idf": true,
+            "stop_words": null,
+            "strip_accents": null,
+            "sublinear_tf": true,
+            "token_pattern": "(?u)\\S+",
+            "tokenizer": null,
+            "use_idf": true,
+            "vocabulary": null
+          },
+          "step": "tfidf"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "Col1"
+      ],
+      "decision": "D05",
+      "name": "col1_value",
+      "reason": "Whole vendor names recur; values seen once fold into an infrequent bucket.",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "OneHotEncoder",
+          "params": {
+            "categories": "auto",
+            "drop": null,
+            "dtype": "<class 'numpy.float64'>",
+            "feature_name_combiner": "concat",
+            "handle_unknown": "infrequent_if_exist",
+            "max_categories": null,
+            "min_frequency": 2,
+            "sparse_output": true
+          },
+          "step": "onehot"
+        }
+      ]
+    },
+    {
+      "columns": "Col4",
+      "decision": "D05",
+      "name": "col4_tokens",
+      "reason": "Line descriptions are the strongest single signal (ablation: -4 points).",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "TfidfVectorizer",
+          "params": {
+            "analyzer": "word",
+            "binary": false,
+            "decode_error": "strict",
+            "dtype": "<class 'numpy.float64'>",
+            "encoding": "utf-8",
+            "input": "content",
+            "lowercase": false,
+            "max_df": 1.0,
+            "max_features": null,
+            "min_df": 1,
+            "ngram_range": "(1, 1)",
+            "norm": "l2",
+            "preprocessor": null,
+            "smooth_idf": true,
+            "stop_words": null,
+            "strip_accents": null,
+            "sublinear_tf": true,
+            "token_pattern": "(?u)\\S+",
+            "tokenizer": null,
+            "use_idf": true,
+            "vocabulary": null
+          },
+          "step": "tfidf"
+        }
+      ]
+    },
+    {
+      "columns": "Col6",
+      "decision": "D05",
+      "name": "col6_tokens",
+      "reason": "Account tokens separate classes within a vendor.",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "TfidfVectorizer",
+          "params": {
+            "analyzer": "word",
+            "binary": false,
+            "decode_error": "strict",
+            "dtype": "<class 'numpy.float64'>",
+            "encoding": "utf-8",
+            "input": "content",
+            "lowercase": false,
+            "max_df": 1.0,
+            "max_features": null,
+            "min_df": 1,
+            "ngram_range": "(1, 1)",
+            "norm": "l2",
+            "preprocessor": null,
+            "smooth_idf": true,
+            "stop_words": null,
+            "strip_accents": null,
+            "sublinear_tf": true,
+            "token_pattern": "(?u)\\S+",
+            "tokenizer": null,
+            "use_idf": true,
+            "vocabulary": null
+          },
+          "step": "tfidf"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "Col6"
+      ],
+      "decision": "D05",
+      "name": "col6_value",
+      "reason": "Whole account names, infrequent values bucketed.",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "OneHotEncoder",
+          "params": {
+            "categories": "auto",
+            "drop": null,
+            "dtype": "<class 'numpy.float64'>",
+            "feature_name_combiner": "concat",
+            "handle_unknown": "infrequent_if_exist",
+            "max_categories": null,
+            "min_frequency": 2,
+            "sparse_output": true
+          },
+          "step": "onehot"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "Col1",
+        "Col6"
+      ],
+      "decision": "D05",
+      "name": "pair",
+      "reason": "Vendor-account pairs resolve vendors split across classes.",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "ColumnConcat",
+          "params": {
+            "separator": " || "
+          },
+          "step": "concat"
+        },
+        {
+          "class": "OneHotEncoder",
+          "params": {
+            "categories": "auto",
+            "drop": null,
+            "dtype": "<class 'numpy.float64'>",
+            "feature_name_combiner": "concat",
+            "handle_unknown": "infrequent_if_exist",
+            "max_categories": null,
+            "min_frequency": 2,
+            "sparse_output": true
+          },
+          "step": "onehot"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "Col7"
+      ],
+      "decision": "D05",
+      "name": "col7",
+      "reason": "Document flag; Doc3 holds most Category_4 rows.",
+      "steps": [
+        {
+          "class": "TextNormalizer",
+          "params": {},
+          "step": "normalize"
+        },
+        {
+          "class": "OneHotEncoder",
+          "params": {
+            "categories": "auto",
+            "drop": null,
+            "dtype": "<class 'numpy.float64'>",
+            "feature_name_combiner": "concat",
+            "handle_unknown": "ignore",
+            "max_categories": null,
+            "min_frequency": null,
+            "sparse_output": true
+          },
+          "step": "onehot"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "amount"
+      ],
+      "decision": "D07",
+      "name": "amount",
+      "reason": "Signed log keeps credits negative and tames an 8.8 million maximum.",
+      "steps": [
+        {
+          "class": "TrainingMedianImputer",
+          "params": {},
+          "step": "impute"
+        },
+        {
+          "class": "SignedLogAmount",
+          "params": {},
+          "step": "signed_log"
+        },
+        {
+          "class": "StandardScaler",
+          "params": {
+            "copy": true,
+            "with_mean": true,
+            "with_std": true
+          },
+          "step": "scale"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "amount"
+      ],
+      "decision": "D07",
+      "name": "amount_flags",
+      "reason": "Negative and round amounts mark rare classes (Category_5, Category_3/4).",
+      "steps": [
+        {
+          "class": "TrainingMedianImputer",
+          "params": {},
+          "step": "impute"
+        },
+        {
+          "class": "AmountFlags",
+          "params": {
+            "modulus": 10.0
+          },
+          "step": "flags"
+        }
+      ]
+    },
+    {
+      "columns": [
+        "period"
+      ],
+      "decision": "D08",
+      "name": "period",
+      "reason": "Monthly period index, clipped to the training range to stop extrapolation.",
+      "steps": [
+        {
+          "class": "TrainingMedianImputer",
+          "params": {},
+          "step": "impute"
+        },
+        {
+          "class": "PeriodEncoder",
+          "params": {
+            "clip": true
+          },
+          "step": "encode"
+        },
+        {
+          "class": "StandardScaler",
+          "params": {
+            "copy": true,
+            "with_mean": true,
+            "with_std": true
+          },
+          "step": "scale"
+        }
+      ]
+    }
+  ]
+}

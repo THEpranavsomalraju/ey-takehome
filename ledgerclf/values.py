@@ -16,47 +16,50 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from ledgerclf.config import EXCEL_SERIAL_RANGE, MONTHS_PER_YEAR, VALID_YEARS
+
 MISSING_MARKERS = frozenset({"", "nan", "none", "null", "n/a", "na", "#n/a", "-", "nat"})
-_INVISIBLE = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff"), None)
 _CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 _WHITESPACE = re.compile(r"\s+")
 
 _CURRENCY = re.compile(r"^(?:usd|eur|gbp|\$|\u20ac|\u00a3)\s*|\s*(?:usd|eur|gbp|\$|\u20ac|\u00a3)$")
-_PLAIN_NUMBER = re.compile(r"^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$", re.ASCII)
-_EUROPEAN = re.compile(r"^[-+]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$", re.ASCII)
-_GROUPED = re.compile(r"^[-+]?\d{1,3}(?P<sep>[,' ])\d{3}(?:(?P=sep)\d{3})*(?:\.\d+)?$", re.ASCII)
+_PLAIN_NUMBER = re.compile(r"^(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$", re.ASCII)
+# European notation only when unambiguous: a decimal comma, or two or more dot groups.
+# "1.234" and "12.500" stay dot-decimal numbers (DECISIONS.md D27).
+_EUROPEAN = re.compile(r"^\d{1,3}(?:\.\d{3})+,\d+$|^\d{1,3}(?:\.\d{3}){2,}$", re.ASCII)
+_GROUPED = re.compile(r"^\d{1,3}(?P<sep>[,' ])\d{3}(?:(?P=sep)\d{3})*(?:\.\d+)?$", re.ASCII)
 
-EXCEL_SERIAL_RANGE = (20_000, 80_000)
 _EXCEL_ORIGIN = dt.datetime(1899, 12, 30)
-VALID_YEARS = (1900, 2200)
 _ISO_DATE = re.compile(r"^(\d{4})[-/.](\d{1,2})(?:[-/.](\d{1,2}))?(?:[ T].*)?$", re.ASCII)
 _COMPACT_DATE = re.compile(r"^(\d{4})(\d{2})(\d{2})$", re.ASCII)
+_COMPACT_DATE_RANGE = (19_000_101, 22_001_231)
 _NUMERIC_DATE = re.compile(r"^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?:[ T].*)?$", re.ASCII)
-_MONTHS = {
-    name: index
-    for index, names in enumerate(
-        [
-            ("jan", "january"),
-            ("feb", "february"),
-            ("mar", "march"),
-            ("apr", "april"),
-            ("may",),
-            ("jun", "june"),
-            ("jul", "july"),
-            ("aug", "august"),
-            ("sep", "sept", "september"),
-            ("oct", "october"),
-            ("nov", "november"),
-            ("dec", "december"),
-        ],
-        start=1,
-    )
-    for name in names
-}
+_MONTH_NAMES = (
+    ("jan", "january"),
+    ("feb", "february"),
+    ("mar", "march"),
+    ("apr", "april"),
+    ("may",),
+    ("jun", "june"),
+    ("jul", "july"),
+    ("aug", "august"),
+    ("sep", "sept", "september"),
+    ("oct", "october"),
+    ("nov", "november"),
+    ("dec", "december"),
+)
+_MONTHS = {name: index for index, names in enumerate(_MONTH_NAMES, start=1) for name in names}
 
 
 def is_missing(value: object) -> bool:
-    """Return True for None, NaN, NaT, and pandas missing scalars."""
+    """Return True for None, NaN, NaT, and pandas missing scalars.
+
+    Args:
+        value: Any cell value.
+
+    Returns:
+        True when the value represents a missing cell.
+    """
     if value is None or value is pd.NA or value is pd.NaT:
         return True
     if isinstance(value, float | np.floating):
@@ -64,7 +67,26 @@ def is_missing(value: object) -> bool:
     return False
 
 
-def clean_text(value: object, max_chars: int) -> tuple[str | None, bool]:
+def strip_invisible(text: str) -> str:
+    """NFKC-normalize text and remove invisible format characters.
+
+    Removes every Unicode "format" (Cf) character: zero-width spaces and
+    joiners, byte-order marks, and direction marks that right-to-left locale
+    exports insert. ASCII text is returned unchanged without a scan.
+
+    Args:
+        text: Any string.
+
+    Returns:
+        The normalized string without format characters.
+    """
+    if text.isascii():
+        return text
+    text = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in text if unicodedata.category(ch) != "Cf")
+
+
+def clean_text(value: object, max_chars: int | None = None) -> tuple[str | None, bool]:
     """Convert any cell to a cleaned display string.
 
     Integer-valued floats lose their ``.0`` so that ``10719.0`` and
@@ -73,21 +95,32 @@ def clean_text(value: object, max_chars: int) -> tuple[str | None, bool]:
 
     Args:
         value: Raw cell value.
-        max_chars: Maximum characters kept; longer text is truncated.
+        max_chars: Maximum characters kept; longer text is truncated. None keeps all.
 
     Returns:
         Tuple of (cleaned text or None, True when truncated).
     """
     if is_missing(value):
         return None, False
-    text = _to_text(value)
-    text = unicodedata.normalize("NFKC", text).translate(_INVISIBLE)
+    text = strip_invisible(_to_text(value))
     text = _WHITESPACE.sub(" ", _CONTROL.sub(" ", text)).strip()
     if text.lower() in MISSING_MARKERS:
         return None, False
-    if len(text) > max_chars:
+    if max_chars is not None and len(text) > max_chars:
         return text[:max_chars], True
     return text, False
+
+
+def is_blank_cell(value: object) -> bool:
+    """Return True when a cell is missing or holds only whitespace or a missing marker.
+
+    Args:
+        value: Raw cell value.
+
+    Returns:
+        True for blank cells.
+    """
+    return clean_text(value)[0] is None
 
 
 def _to_text(value: object) -> str:
@@ -107,9 +140,10 @@ def _to_text(value: object) -> str:
 def parse_amount(value: object) -> float | None:
     """Parse an amount cell into a finite float.
 
-    Accepts numbers and strings with currency symbols or codes, thousands
-    separators, parentheses or a trailing minus for negatives, and European
-    ``1.234,56`` notation. Ambiguous or malformed text returns None.
+    Accepts numbers and strings with currency symbols or codes on either side
+    of the sign, thousands separators, parentheses or a trailing minus for
+    negatives, and unambiguous European ``1.234,56`` notation. Malformed text
+    returns None instead of a guess.
 
     Args:
         value: Raw cell value.
@@ -124,32 +158,74 @@ def parse_amount(value: object) -> float | None:
         return number if math.isfinite(number) else None
     if not isinstance(value, str):
         return None
-    return _parse_amount_text(unicodedata.normalize("NFKC", value))
+    return _parse_amount_text(strip_invisible(value))
 
 
 def _parse_amount_text(text: str) -> float | None:
     text = text.strip().replace("\u2212", "-").lower()
-    negative = False
+    signs: list[str] = []
     if text.startswith("(") and text.endswith(")"):
-        negative, text = True, text[1:-1].strip()
-    text = _CURRENCY.sub("", text).strip()
-    if text.endswith("-") and not text.startswith("-"):
-        negative, text = True, text[:-1].strip()
-    number = _number_from_text(text)
-    if number is None or (negative and number < 0) or not math.isfinite(number):
+        signs.append("-")
+        text = text[1:-1].strip()
+    text = _strip_sign(text, signs)  # "-$5" -> "$5"
+    text = _CURRENCY.sub("", text).strip()  # "$5" -> "5", "5 usd" -> "5"
+    text = _strip_sign(text, signs)  # "$-5" -> "-5" -> "5"
+    if text.endswith("-"):
+        signs.append("-")
+        text = text[:-1].strip()
+    if len(signs) > 1:  # "(-5)", "--5": contradictory signs are rejected, not guessed
         return None
-    return -number if negative else number
+    number = _number_from_text(text)
+    if number is None:
+        return None
+    return -number if signs else number
+
+
+def _strip_sign(text: str, signs: list[str]) -> str:
+    """Remove one leading sign, recording a minus in ``signs``."""
+    if text[:1] in ("-", "+"):
+        if text[0] == "-":
+            signs.append("-")
+        return text[1:].lstrip()
+    return text
 
 
 def _number_from_text(text: str) -> float | None:
     if _EUROPEAN.match(text):
-        return float(text.replace(".", "").replace(",", "."))
-    grouped = _GROUPED.match(text)
-    if grouped:
-        return float(text.replace(grouped.group("sep"), ""))
-    if _PLAIN_NUMBER.match(text):
-        return float(text)
-    return None
+        number = float(text.replace(".", "").replace(",", "."))
+    elif grouped := _GROUPED.match(text):
+        number = float(text.replace(grouped.group("sep"), ""))
+    elif _PLAIN_NUMBER.match(text):
+        number = float(text)
+    else:
+        return None
+    return number if math.isfinite(number) else None
+
+
+def period_index(year: int, month: int) -> int:
+    """Return the model's period feature, ``year * 12 + month``.
+
+    Args:
+        year: Calendar year.
+        month: Month number, 1 to 12.
+
+    Returns:
+        The integer period index.
+    """
+    return year * MONTHS_PER_YEAR + month
+
+
+def period_label(index: int) -> str:
+    """Convert a period index back to ``YYYY-MM``.
+
+    Args:
+        index: Value produced by ``period_index``.
+
+    Returns:
+        The display label.
+    """
+    year, month = divmod(index - 1, MONTHS_PER_YEAR)
+    return f"{year:04d}-{month + 1:02d}"
 
 
 @dataclass(frozen=True)
@@ -162,7 +238,7 @@ class ParsedDate:
     @property
     def period_index(self) -> int:
         """Return ``year * 12 + month``, the model's period feature."""
-        return self.year * 12 + self.month
+        return period_index(self.year, self.month)
 
     @property
     def label(self) -> str:
@@ -170,32 +246,47 @@ class ParsedDate:
         return f"{self.year:04d}-{self.month:02d}"
 
 
-def period_label(period_index: int) -> str:
-    """Convert a period index back to ``YYYY-MM``."""
-    year, month = divmod(period_index - 1, 12)
-    return f"{year:04d}-{month + 1:02d}"
+def date_order_evidence(value: object) -> str | None:
+    """Tell whether an ``a/b/yyyy`` string proves the column's day and month order.
 
+    Only a valid date counts: ``31/08/2018`` proves day-first, ``08/31/2018``
+    proves month-first, and a typo such as ``45/08/2018`` proves nothing.
 
-def numeric_date_first_part(value: object) -> int | None:
-    """Return the first number of an ``a/b/yyyy`` string, else None.
+    Args:
+        value: Raw cell value.
 
-    Used by column-level day-first inference.
+    Returns:
+        ``"day_first"``, ``"month_first"``, or None when the value proves neither.
     """
     if not isinstance(value, str):
         return None
-    match = _NUMERIC_DATE.match(value.strip())
-    return int(match.group(1)) if match else None
+    match = _NUMERIC_DATE.match(strip_invisible(value).strip())
+    if match is None:
+        return None
+    first, second, year = (int(part) for part in match.groups())
+    if first > MONTHS_PER_YEAR and _checked(year, second, first) is not None:
+        return "day_first"
+    if second > MONTHS_PER_YEAR and _checked(year, first, second) is not None:
+        return "month_first"
+    return None
 
 
 def is_ambiguous_numeric_date(value: object) -> bool:
-    """Return True for ``a/b/yyyy`` strings where both parts could be the month."""
+    """Return True for ``a/b/yyyy`` strings where both parts could be the month.
+
+    Args:
+        value: Raw cell value.
+
+    Returns:
+        True when the day and month order cannot be told from this value alone.
+    """
     if not isinstance(value, str):
         return False
-    match = _NUMERIC_DATE.match(value.strip())
+    match = _NUMERIC_DATE.match(strip_invisible(value).strip())
     if match is None:
         return False
     first, second = int(match.group(1)), int(match.group(2))
-    return first <= 12 and second <= 12 and first != second
+    return first <= MONTHS_PER_YEAR and second <= MONTHS_PER_YEAR and first != second
 
 
 def parse_date(value: object, day_first: bool) -> ParsedDate | None:
@@ -214,10 +305,20 @@ def parse_date(value: object, day_first: bool) -> ParsedDate | None:
         stamp = pd.Timestamp(value)
         return _checked(stamp.year, stamp.month, stamp.day)
     if isinstance(value, int | float | np.integer | np.floating):
-        return _from_serial(float(value))
+        return _from_number(float(value))
     if isinstance(value, str):
-        return _parse_date_text(unicodedata.normalize("NFKC", value).strip(), day_first)
+        return _parse_date_text(strip_invisible(value).strip(), day_first)
     return None
+
+
+def _from_number(number: float) -> ParsedDate | None:
+    """Read a numeric cell as an Excel serial date or a ``yyyymmdd`` integer."""
+    low, high = _COMPACT_DATE_RANGE
+    if math.isfinite(number) and number.is_integer() and low <= number <= high:
+        compact = _COMPACT_DATE.match(str(int(number)))
+        if compact:
+            return _checked(*(int(part) for part in compact.groups()))
+    return _from_serial(number)
 
 
 def _from_serial(number: float) -> ParsedDate | None:
@@ -231,15 +332,15 @@ def _from_serial(number: float) -> ParsedDate | None:
 def _parse_date_text(text: str, day_first: bool) -> ParsedDate | None:
     if not text:
         return None
-    if re.fullmatch(r"\d+(?:\.\d+)?", text, re.ASCII):
-        compact = _COMPACT_DATE.match(text)
-        if compact:
-            return _checked(*(int(part) for part in compact.groups()))
-        return _from_serial(float(text))
-    iso = _ISO_DATE.match(text)
+    compact = _COMPACT_DATE.match(text)
+    if compact:
+        return _checked(*(int(part) for part in compact.groups()))
+    iso = _ISO_DATE.match(text)  # before the serial check, so "2018.08" reads as a month
     if iso:
         year, month, day = iso.groups()
         return _checked(int(year), int(month), int(day) if day else 1)
+    if re.fullmatch(r"\d+(?:\.\d+)?", text, re.ASCII):
+        return _from_serial(float(text))
     numeric = _NUMERIC_DATE.match(text)
     if numeric:
         first, second, year = (int(part) for part in numeric.groups())

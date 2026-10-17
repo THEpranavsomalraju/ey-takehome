@@ -25,7 +25,7 @@ from ledgerclf.splitting import (
 from tests.conftest import process
 
 
-def test_group_key_reproduces_duplicate_counts(labeled_raw, settings):
+def test_group_key_reproduces_duplicate_counts(labeled_raw):
     frame = labeled_raw.frame
     all_inputs = frame[list(INPUT_COLUMNS)].fillna("__missing__").astype(str)
     assert all_inputs.duplicated().sum() == 680
@@ -35,8 +35,7 @@ def test_group_key_reproduces_duplicate_counts(labeled_raw, settings):
 
 def test_date_level_duplicates_match_docs(settings):
     raw = pd.read_excel(settings.paths.raw_data, engine="xlrd")
-    key_columns = [c for c in MODEL_INPUT_COLUMNS]
-    assert raw[key_columns].astype(str).duplicated().sum() == 1508
+    assert raw[list(MODEL_INPUT_COLUMNS)].astype(str).duplicated().sum() == 1508
 
 
 def test_one_conflicting_group_on_all_inputs(labeled_raw):
@@ -98,7 +97,7 @@ def test_seed_rule_raises_when_unsatisfiable(labeled_raw):
 
 
 def test_split_files_match_manifest_hash(settings):
-    from ledgerclf.splitting import sha256_file
+    from ledgerclf.io import sha256_file
 
     manifest = json.loads((settings.paths.splits / MANIFEST_FILE).read_text(encoding="utf-8"))
     assert manifest["holdout_row_ids_sha256"] == sha256_file(
@@ -162,7 +161,73 @@ def test_holdout_guard_rejects_forged_tokens(settings):
         read_holdout_labels(settings.paths, token="not a token")
 
 
-def test_holdout_guard_accepts_issued_token(settings):
+def test_holdout_guard_accepts_issued_token(tmp_path):
+    from ledgerclf.config import Paths
+    from ledgerclf.splitting import HOLDOUT_LABELS_FILE
+
+    paths = Paths.from_root(tmp_path)
+    paths.holdout.mkdir(parents=True)
+    (paths.holdout / HOLDOUT_LABELS_FILE).write_text(
+        "row_number,ClassificationLabel\n1,Category_1\n", encoding="utf-8"
+    )
     token = issue_holdout_token(confirmed=True, reason="guard test")
-    labels = read_holdout_labels(settings.paths, token)
-    assert len(labels) == 590
+    assert len(read_holdout_labels(paths, token)) == 1
+
+
+def _copy_project(tmp_path, settings):
+    import shutil
+
+    root = tmp_path / "copy"
+    for relative in ("data/raw", "data/splits"):
+        shutil.copytree(settings.paths.root / relative, root / relative)
+    from ledgerclf.config import Paths, Settings
+
+    return Settings(paths=Paths.from_root(root))
+
+
+def test_split_refuses_to_change_persisted_holdout(tmp_path, settings):
+    from ledgerclf.splitting import make_holdout_split
+
+    copy = _copy_project(tmp_path, settings)
+    ids_path = copy.paths.splits / HOLDOUT_IDS_FILE
+    ids = pd.read_csv(ids_path)
+    ids.iloc[:-1].to_csv(ids_path, index=False)
+    with pytest.raises(ConfigError) as caught:
+        make_holdout_split(copy)
+    assert caught.value.code == "SPLIT_WOULD_CHANGE"
+    make_holdout_split(copy, force=True)
+    assert len(pd.read_csv(ids_path)) == len(ids)
+
+
+def test_load_split_detects_tampered_files(tmp_path, settings):
+    copy = _copy_project(tmp_path, settings)
+    ids_path = copy.paths.splits / HOLDOUT_IDS_FILE
+    ids_path.write_text(ids_path.read_text(encoding="utf-8") + "5000\n", encoding="utf-8")
+    with pytest.raises(ConfigError) as caught:
+        load_split(copy.paths)
+    assert caught.value.code == "SPLIT_HASH_MISMATCH"
+
+
+def test_load_split_explains_missing_split(tmp_path):
+    from ledgerclf.config import Paths
+
+    with pytest.raises(ConfigError) as caught:
+        load_split(Paths.from_root(tmp_path))
+    assert "python -m ledgerclf split" in caught.value.message
+
+
+def test_unmapped_training_label_stops_the_split(tmp_path, settings):
+    from ledgerclf.config import Paths, Settings
+    from ledgerclf.exceptions import SchemaError
+    from ledgerclf.splitting import make_holdout_split
+    from tests.conftest import sample_frame, xlsx_bytes
+
+    paths = Paths.from_root(tmp_path)
+    paths.raw_data.parent.mkdir(parents=True)
+    bad = sample_frame(with_label=True)
+    bad.loc[1, "ClassificationLabel"] = "Category_9"
+    paths.raw_data.write_bytes(xlsx_bytes({"data": bad}))
+    with pytest.raises(SchemaError) as caught:
+        make_holdout_split(Settings(paths=paths))
+    assert caught.value.code == "UNMAPPED_TRAINING_LABEL"
+    assert "Category_9" in caught.value.message

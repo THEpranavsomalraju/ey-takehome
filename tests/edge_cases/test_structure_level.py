@@ -128,3 +128,29 @@ def test_s14_pandas_index_column_is_ignored():
     out_named, issues_named, _ = process(xlsx_bytes({"data": named}), "unnamed.xlsx")
     assert "EXTRA_COLUMNS_IGNORED" not in codes(issues_named)
     assert len(out_named) == len(SAMPLE_ROWS)
+
+
+def test_s11_blank_csv_lines_keep_true_source_rows():
+    text = csv_bytes(SAMPLE_ROWS).decode("utf-8").splitlines()
+    data = "\n".join([text[0], text[1], "", text[2], ",,,,,,", text[3]]).encode("utf-8") + b"\n\n"
+    out, issues, _ = process(data, "blank_lines.csv")
+    assert out["source_row"].tolist() == [2, 4, 6]
+    dropped = next(i for i in issues if i.code == "EMPTY_ROWS_DROPPED")
+    assert dropped.row_numbers == (3, 5)
+
+
+def test_s11_blank_xlsx_rows_keep_true_source_rows():
+    import io as std_io
+
+    import openpyxl
+
+    book = openpyxl.Workbook()
+    sheet = book.active
+    sheet.append(HEADER)
+    sheet.append(SAMPLE_ROWS[0])
+    sheet.append([])
+    sheet.append(SAMPLE_ROWS[1])
+    buffer = std_io.BytesIO()
+    book.save(buffer)
+    out, _, _ = process(buffer.getvalue(), "blank_rows.xlsx")
+    assert out["source_row"].tolist() == [2, 4]

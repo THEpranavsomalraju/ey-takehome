@@ -8,12 +8,9 @@ the ``evaluate-holdout`` command alone creates (CLAUDE.md rule 1).
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
-import re
 import warnings
-import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -25,37 +22,40 @@ import pandas as pd
 import sklearn
 from sklearn.model_selection import StratifiedGroupKFold, StratifiedKFold
 
-from ledgerclf.config import HoldoutRule, Limits, Paths, Settings
+from ledgerclf.config import HOLDOUT_FEATURES_STEM, HoldoutRule, Limits, Paths, Settings
 from ledgerclf.exceptions import ConfigError, HoldoutAccessError, SchemaError
-from ledgerclf.io import read_table
+from ledgerclf.io import read_table, sha256_file, write_xlsx_deterministic
 from ledgerclf.labels import CANONICAL_CLASSES, normalize_labels
 from ledgerclf.schema import (
     AMOUNT,
     COL_ACCOUNT,
     COL_DESCRIPTION,
     COL_DOC_TYPE,
+    COL_INVOICE,
     COL_VENDOR,
     INPUT_COLUMNS,
     LABEL_COLUMN,
     MISSING_TOKEN,
     PERIOD,
     ROW_NUMBER,
+    SOURCE_ROW,
     coerce_values,
     resolve_columns,
 )
-from ledgerclf.values import is_missing, period_label
+from ledgerclf.values import is_missing, period_index, period_label
 
 logger = logging.getLogger(__name__)
 
 ROW_ID = "row_id"
 HOLDOUT_IDS_FILE = "holdout_row_ids.csv"
 MANIFEST_FILE = "split_manifest.json"
-HOLDOUT_FEATURES_STEM = "holdout_features"
 HOLDOUT_LABELS_FILE = "holdout_labels.csv"
 HOLDOUT_WITH_LABELS_FILE = "holdout_with_labels.xlsx"
 _GROUP_KEY_SEPARATOR = "\x1f"
-_FIXED_STAMP = b"2026-01-01T00:00:00Z"
-_FIXED_W3CDTF = re.compile(rb"(<dcterms:(?:created|modified)[^>]*>)[^<]*(</dcterms:)")
+_GUARD_MESSAGE = (
+    "Holdout labels are only available to the evaluate-holdout command. Ask the project "
+    "owner before running: python -m ledgerclf evaluate-holdout --confirm"
+)
 
 
 @contextmanager
@@ -75,7 +75,7 @@ def build_group_key(frame: pd.DataFrame) -> np.ndarray:
 
     Rows identical on Col1, Col3, Col4, Col5 (monthly period), Col6, and Col7
     share a group, so copies never land on both sides of a split. Col2 stays
-    out because many copies differ only by invoice number (DECISIONS.md D02).
+    out because many copies differ only by invoice number (DECISIONS.md D02, D22).
 
     Args:
         frame: Coerced frame from ``schema.coerce_values``.
@@ -97,19 +97,42 @@ def build_group_key(frame: pd.DataFrame) -> np.ndarray:
 
 
 def vendor_groups(frame: pd.DataFrame) -> np.ndarray:
-    """Return integer group ids from the lowercased vendor name (unseen-vendor CV)."""
+    """Return group ids from the lowercased vendor name, for unseen-vendor CV.
+
+    Args:
+        frame: Coerced frame.
+
+    Returns:
+        Integer group ids, one per distinct vendor.
+    """
     vendors = frame[COL_VENDOR].fillna(MISSING_TOKEN).astype(str).str.lower()
     codes, _ = pd.factorize(vendors, sort=False)
     return codes.astype(np.int64)
 
 
 def grouped_cv(seed: int, n_splits: int) -> StratifiedGroupKFold:
-    """Return the primary grouped, stratified splitter for one seed."""
+    """Return the primary grouped, stratified splitter.
+
+    Args:
+        seed: Shuffle seed.
+        n_splits: Number of folds.
+
+    Returns:
+        A ``StratifiedGroupKFold`` with shuffling.
+    """
     return StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
 
 def random_cv(seed: int, n_splits: int) -> StratifiedKFold:
-    """Return the ungrouped splitter, used only for the leakage demonstration."""
+    """Return the ungrouped splitter, used only for the leakage demonstration.
+
+    Args:
+        seed: Shuffle seed.
+        n_splits: Number of folds.
+
+    Returns:
+        A ``StratifiedKFold`` with shuffling.
+    """
     return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
 
@@ -124,7 +147,7 @@ def out_of_time_mask(frame: pd.DataFrame, cutoff: str) -> np.ndarray:
         Boolean mask; rows with missing periods are treated as training rows.
     """
     stamp = pd.Timestamp(cutoff)
-    cutoff_period = stamp.year * 12 + stamp.month
+    cutoff_period = period_index(stamp.year, stamp.month)
     period = frame[PERIOD].to_numpy(dtype=float)
     return np.asarray(np.isnan(period) | (period <= cutoff_period), dtype=bool)
 
@@ -194,8 +217,9 @@ class SplitResult:
 
 @dataclass(frozen=True)
 class LabeledFrame:
-    """The full raw file after coercion, with canonical labels and group ids."""
+    """The full raw file: raw cells, coerced frame, canonical labels, and group ids."""
 
+    raw: pd.DataFrame
     frame: pd.DataFrame
     y: np.ndarray
     groups: np.ndarray
@@ -204,14 +228,20 @@ class LabeledFrame:
 def load_labeled_raw(paths: Paths, limits: Limits) -> LabeledFrame:
     """Read the raw training file through the shared validation path.
 
+    ``row_id`` is the 0-based position of the row below the header in the raw
+    sheet, derived from the spreadsheet row number, so it stays correct even
+    if blank rows are dropped during coercion.
+
     Args:
         paths: Project paths.
         limits: Input limits.
 
     Returns:
-        Coerced frame (``row_id`` is the 0-based raw row index), labels, groups.
+        The raw cells (resolved columns, one row per sheet row), the coerced
+        frame with ``row_id``, labels, and group ids.
 
     Raises:
+        FileReadError: When the raw file is missing or unreadable.
         SchemaError: When any raw label fails to map to a canonical class.
     """
     raw, _, _ = read_table(paths.raw_data, paths.raw_data.name, limits)
@@ -225,55 +255,80 @@ def load_labeled_raw(paths: Paths, limits: Limits) -> LabeledFrame:
             "Fix the labels in the raw file or extend labels.normalize_label.",
             code="UNMAPPED_TRAINING_LABEL",
         )
+    first_data_row = int(resolved[SOURCE_ROW].iloc[0])
     frame = frame.copy()
-    frame.insert(0, ROW_ID, frame[ROW_NUMBER].to_numpy() - 1)
-    return LabeledFrame(frame, labels.to_numpy(dtype=object), build_group_key(frame))
+    frame.insert(0, ROW_ID, frame[SOURCE_ROW].to_numpy() - first_data_row)
+    return LabeledFrame(resolved, frame, labels.to_numpy(dtype=object), build_group_key(frame))
 
 
-def make_holdout_split(settings: Settings) -> SplitResult:
+def make_holdout_split(settings: Settings, force: bool = False) -> SplitResult:
     """Run the seed rule on the raw file and persist the split and holdout files.
+
+    Rerunning is safe: when a split already exists, the recomputed holdout
+    must equal the persisted one (same files, same bytes). A different result
+    (new sklearn version, edited rule, changed raw file) raises instead of
+    silently moving rows between training and holdout.
 
     Args:
         settings: Project settings.
+        force: Replace an existing split even when the holdout would change.
 
     Returns:
         The persisted split.
+
+    Raises:
+        ConfigError: When an existing split would change and ``force`` is False,
+            or when no seed satisfies the rule.
+        SchemaError: When a raw label does not map to a canonical class.
     """
     data = load_labeled_raw(settings.paths, settings.limits)
     selection = select_holdout_seed(data.y, data.groups, settings.holdout_rule)
     train_ids = data.frame[ROW_ID].to_numpy()[selection.train_idx]
     holdout_ids = data.frame[ROW_ID].to_numpy()[selection.holdout_idx]
+    if not force:
+        _refuse_changed_split(settings.paths, holdout_ids)
     splits_dir, holdout_dir = settings.paths.splits, settings.paths.holdout
     splits_dir.mkdir(parents=True, exist_ok=True)
     holdout_dir.mkdir(parents=True, exist_ok=True)
     ids_path = splits_dir / HOLDOUT_IDS_FILE
-    pd.DataFrame({ROW_ID: holdout_ids}).to_csv(ids_path, index=False, lineterminator="\n")
-    _write_holdout_files(settings, holdout_ids)
+    _write_csv(pd.DataFrame({ROW_ID: holdout_ids}), ids_path)
+    _write_holdout_files(settings, data.raw, holdout_ids)
     manifest = _build_manifest(settings, data, selection, ids_path)
     _write_json(splits_dir / MANIFEST_FILE, manifest)
     return SplitResult(np.sort(train_ids), np.sort(holdout_ids), manifest)
 
 
-def _write_holdout_files(settings: Settings, holdout_ids: np.ndarray) -> None:
-    raw = pd.read_excel(settings.paths.raw_data, engine="xlrd", dtype=object)
+def _refuse_changed_split(paths: Paths, holdout_ids: np.ndarray) -> None:
+    ids_path = paths.splits / HOLDOUT_IDS_FILE
+    if not ids_path.exists():
+        return
+    persisted = pd.read_csv(ids_path, encoding="utf-8")[ROW_ID].to_numpy(dtype=np.int64)
+    if not np.array_equal(np.sort(persisted), np.sort(holdout_ids)):
+        raise ConfigError(
+            "Recomputing the split gives a different holdout than the persisted one in "
+            "data/splits. Models trained on the old split would then see holdout rows. Keep "
+            "the persisted split, or rerun with --force and retrain every model.",
+            code="SPLIT_WOULD_CHANGE",
+        )
+
+
+def _write_csv(frame: pd.DataFrame, path: Path) -> None:
+    frame.to_csv(path, index=False, encoding="utf-8", lineterminator="\n")
+
+
+def _write_holdout_files(settings: Settings, raw: pd.DataFrame, holdout_ids: np.ndarray) -> None:
+    """Write holdout features with original raw values, so uploads exercise full validation."""
     held = raw.iloc[np.sort(holdout_ids)].reset_index(drop=True)
     features = held[list(INPUT_COLUMNS)].copy()
-    features[INPUT_COLUMNS[1]] = features[INPUT_COLUMNS[1]].map(_invoice_text)
+    features[COL_INVOICE] = features[COL_INVOICE].map(_invoice_text)
     holdout_dir = settings.paths.holdout
-    _write_xlsx(features, holdout_dir / f"{HOLDOUT_FEATURES_STEM}.xlsx")
-    features.to_csv(
-        holdout_dir / f"{HOLDOUT_FEATURES_STEM}.csv",
-        index=False,
-        encoding="utf-8",
-        lineterminator="\n",
-    )
+    write_xlsx_deterministic(features, holdout_dir / f"{HOLDOUT_FEATURES_STEM}.xlsx")
+    _write_csv(features, holdout_dir / f"{HOLDOUT_FEATURES_STEM}.csv")
     labels = pd.DataFrame(
-        {"row_number": np.arange(1, len(held) + 1), LABEL_COLUMN: held[LABEL_COLUMN]}
+        {ROW_NUMBER: np.arange(1, len(held) + 1), LABEL_COLUMN: held[LABEL_COLUMN]}
     )
-    labels.to_csv(
-        holdout_dir / HOLDOUT_LABELS_FILE, index=False, encoding="utf-8", lineterminator="\n"
-    )
-    _write_xlsx(
+    _write_csv(labels, holdout_dir / HOLDOUT_LABELS_FILE)
+    write_xlsx_deterministic(
         features.assign(**{LABEL_COLUMN: held[LABEL_COLUMN]}),
         holdout_dir / HOLDOUT_WITH_LABELS_FILE,
     )
@@ -283,30 +338,6 @@ def _invoice_text(value: object) -> str:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return "" if is_missing(value) else str(value)
-
-
-def _write_xlsx(frame: pd.DataFrame, path: Path) -> None:
-    """Write an xlsx, then pin its timestamps so reruns are byte-identical."""
-    with pd.ExcelWriter(path, engine="openpyxl") as writer:
-        frame.to_excel(writer, index=False, sheet_name="data")
-    _pin_xlsx_timestamps(path)
-
-
-def _pin_xlsx_timestamps(path: Path) -> None:
-    """Replace document-property and zip-entry timestamps with a fixed value.
-
-    openpyxl stamps the save time into ``docProps/core.xml`` and every zip
-    entry, which would make each ``split`` run produce different bytes.
-    """
-    with zipfile.ZipFile(path) as source:
-        entries = [(info.filename, source.read(info.filename)) for info in source.infolist()]
-    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as target:
-        for name, payload in entries:
-            if name == "docProps/core.xml":
-                payload = _FIXED_W3CDTF.sub(rb"\g<1>" + _FIXED_STAMP + rb"\g<2>", payload)
-            info = zipfile.ZipInfo(name, date_time=(2026, 1, 1, 0, 0, 0))
-            info.compress_type = zipfile.ZIP_DEFLATED
-            target.writestr(info, payload)
 
 
 def _class_counts(y: np.ndarray) -> dict[str, int]:
@@ -352,24 +383,22 @@ def _build_manifest(
     }
 
 
-def sha256_file(path: Path) -> str:
-    """Return the hex SHA-256 of a file."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def load_split(paths: Paths) -> SplitResult:
-    """Read the persisted split. Never recomputes it.
+    """Read the persisted split, verifying its hashes. Never recomputes it.
+
+    Args:
+        paths: Project paths.
+
+    Returns:
+        Training and holdout row ids plus the manifest.
 
     Raises:
-        ConfigError: When the split files do not exist yet.
+        ConfigError: When the split files do not exist, or when the raw file
+            or the id file no longer match the hashes in the manifest.
     """
     ids_path = paths.splits / HOLDOUT_IDS_FILE
     manifest_path = paths.splits / MANIFEST_FILE
@@ -378,20 +407,37 @@ def load_split(paths: Paths) -> SplitResult:
             "The holdout split does not exist yet. Run: python -m ledgerclf split",
             code="SPLIT_MISSING",
         )
-    holdout_ids = pd.read_csv(ids_path)[ROW_ID].to_numpy(dtype=np.int64)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    _verify_hash(ids_path, manifest["holdout_row_ids_sha256"])
+    _verify_hash(paths.raw_data, manifest["raw_data_sha256"])
+    holdout_ids = pd.read_csv(ids_path, encoding="utf-8")[ROW_ID].to_numpy(dtype=np.int64)
     total = int(manifest["rows"]["total"])
     train_ids = np.setdiff1d(np.arange(total), holdout_ids)
     return SplitResult(train_ids, np.sort(holdout_ids), manifest)
 
 
+def _verify_hash(path: Path, expected: str) -> None:
+    if sha256_file(path) != expected:
+        raise ConfigError(
+            f"{path.name} does not match the hash recorded in split_manifest.json. The raw data "
+            "or the split changed after the split was made. Restore the original files from "
+            "the submission, or rerun: python -m ledgerclf split --force (then retrain).",
+            code="SPLIT_HASH_MISMATCH",
+        )
+
+
 @dataclass(frozen=True)
 class TrainingData:
-    """Training rows only: coerced frame, canonical labels, group ids."""
+    """Training rows only: coerced frame, canonical labels, group ids, raw cells.
+
+    ``raw`` holds the original cells of the same rows (resolved columns, before
+    coercion), aligned with ``frame``, for before-and-after views.
+    """
 
     frame: pd.DataFrame
     y: np.ndarray
     groups: np.ndarray
+    raw: pd.DataFrame
 
 
 def load_training_frame(settings: Settings) -> TrainingData:
@@ -404,12 +450,22 @@ def load_training_frame(settings: Settings) -> TrainingData:
 
     Returns:
         Training frame (index reset), labels, and group ids.
+
+    Raises:
+        ConfigError: When the split is missing or does not match the raw file.
     """
     split = load_split(settings.paths)
     data = load_labeled_raw(settings.paths, settings.limits)
+    if len(data.y) != int(split.manifest["rows"]["total"]):
+        raise ConfigError(
+            "The raw file row count differs from the split manifest. Restore the original "
+            "raw file, or rerun: python -m ledgerclf split --force (then retrain).",
+            code="SPLIT_ROWS_MISMATCH",
+        )
     keep = ~np.isin(data.frame[ROW_ID].to_numpy(), split.holdout_ids)
     frame = data.frame.loc[keep].reset_index(drop=True)
-    return TrainingData(frame, data.y[keep], data.groups[keep])
+    raw = data.raw.iloc[frame[ROW_ID].to_numpy()].drop(columns=[LABEL_COLUMN])
+    return TrainingData(frame, data.y[keep], data.groups[keep], raw.reset_index(drop=True))
 
 
 class HoldoutAccessToken:
@@ -424,14 +480,19 @@ class HoldoutAccessToken:
 
     def __init__(self, issuer_key: object, reason: str) -> None:
         if issuer_key is not HoldoutAccessToken._issuer_key:
-            raise HoldoutAccessError(
-                "Holdout labels are only available to the evaluate-holdout command.",
-            )
+            raise HoldoutAccessError(_GUARD_MESSAGE)
         self.reason = reason
 
 
 def issue_holdout_token(confirmed: bool, reason: str) -> HoldoutAccessToken:
     """Create a holdout access token. Call only from the evaluate-holdout command.
+
+    Args:
+        confirmed: The user's explicit ``--confirm`` flag.
+        reason: Why the holdout is being read (written to the access log).
+
+    Returns:
+        The token.
 
     Raises:
         HoldoutAccessError: Without explicit confirmation.
@@ -448,11 +509,18 @@ def issue_holdout_token(confirmed: bool, reason: str) -> HoldoutAccessToken:
 def read_holdout_labels(paths: Paths, token: object) -> pd.DataFrame:
     """Read the holdout labels. Requires a token from ``issue_holdout_token``.
 
+    Args:
+        paths: Project paths.
+        token: The access token.
+
+    Returns:
+        Frame with ``row_number`` and the raw ``ClassificationLabel``.
+
     Raises:
         HoldoutAccessError: When the token is missing or forged.
     """
     if not isinstance(token, HoldoutAccessToken):
-        raise HoldoutAccessError(
-            "Holdout labels are only available to the evaluate-holdout command.",
-        )
-    return pd.read_csv(paths.holdout / HOLDOUT_LABELS_FILE, dtype=object, keep_default_na=False)
+        raise HoldoutAccessError(_GUARD_MESSAGE)
+    return pd.read_csv(
+        paths.holdout / HOLDOUT_LABELS_FILE, dtype=object, keep_default_na=False, encoding="utf-8"
+    )

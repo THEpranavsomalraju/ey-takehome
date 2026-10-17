@@ -1,0 +1,399 @@
+{
+  "reports": [
+    {
+      "columns": [
+        "text_amount_doc",
+        "text_only"
+      ],
+      "description": "Best possible accuracy given rows with identical inputs and different labels.",
+      "file": "eda/accuracy_ceiling.json",
+      "producer": "eda",
+      "title": "Accuracy ceiling"
+    },
+    {
+      "columns": [
+        "class",
+        "count",
+        "median",
+        "mean",
+        "min",
+        "max"
+      ],
+      "description": "Count, median, mean, min, and max of Col3 per class.",
+      "file": "eda/amount_by_class.csv",
+      "producer": "eda",
+      "title": "Amount by class"
+    },
+    {
+      "columns": [
+        "bin_left",
+        "bin_right",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6"
+      ],
+      "description": "Per-class row counts over 30 equal-width bins of sign(x) * log1p(|x|).",
+      "file": "eda/amount_histogram.csv",
+      "producer": "eda",
+      "title": "Amount histogram (signed log)"
+    },
+    {
+      "columns": [
+        "row_id",
+        "amount",
+        "signed_log_amount",
+        "side",
+        "fence_low",
+        "fence_high",
+        "class"
+      ],
+      "description": "Rows outside 1.5 x IQR fences of the signed-log amount. Kept in training because they look like real ledger values (D07).",
+      "file": "eda/amount_outliers.csv",
+      "producer": "eda",
+      "title": "Amount outliers (IQR on signed log)"
+    },
+    {
+      "columns": [
+        "statistic",
+        "value"
+      ],
+      "description": "Headline statistics of Col3 on the training portion.",
+      "file": "eda/amount_summary.csv",
+      "producer": "eda",
+      "title": "Amount summary"
+    },
+    {
+      "columns": [
+        "class",
+        "rows",
+        "share"
+      ],
+      "description": "Rows and share per class in the training portion.",
+      "file": "eda/class_distribution.csv",
+      "producer": "eda",
+      "title": "Class distribution"
+    },
+    {
+      "columns": [
+        "pattern",
+        "rows",
+        "example"
+      ],
+      "description": "Most common invoice number shapes (digit to 9, letter to A). Label-free.",
+      "file": "eda/col2_patterns.csv",
+      "producer": "eda",
+      "title": "Col2 format patterns (full file)"
+    },
+    {
+      "columns": [
+        "category",
+        "rows"
+      ],
+      "description": "Python types of raw invoice numbers, including corrupted scientific-notation strings. Label-free.",
+      "file": "eda/col2_type_mix.csv",
+      "producer": "eda",
+      "title": "Col2 type mix (full file)"
+    },
+    {
+      "columns": [
+        "Col7",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6",
+        "total"
+      ],
+      "description": "Col7 values by class.",
+      "file": "eda/col7_by_class.csv",
+      "producer": "eda",
+      "title": "Document flag by class"
+    },
+    {
+      "columns": [
+        "group_id",
+        "rows",
+        "Col1",
+        "Col3",
+        "Col4",
+        "Col5",
+        "Col6",
+        "Col7",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6"
+      ],
+      "description": "Identical rows (group key) carrying different labels.",
+      "file": "eda/conflict_groups.csv",
+      "producer": "eda",
+      "title": "Label conflict groups"
+    },
+    {
+      "columns": [
+        "variable",
+        "Col1 vendor",
+        "Col6 account",
+        "Col1+Col6 pair",
+        "Col7 doc type",
+        "Col5 period",
+        "Col3 amount decile",
+        "label"
+      ],
+      "description": "Association between categorical views of the inputs and the label.",
+      "file": "eda/cramers_v.csv",
+      "producer": "eda",
+      "title": "Cramer's V (bias-corrected)"
+    },
+    {
+      "columns": [
+        "day",
+        "rows"
+      ],
+      "description": "Day-of-month distribution of raw Col5 dates: month starts and ends only, so Col5 is a monthly period.",
+      "file": "eda/day_of_month.csv",
+      "producer": "eda",
+      "title": "Day of month"
+    },
+    {
+      "columns": [
+        "group_size",
+        "groups"
+      ],
+      "description": "How many group-key groups have each size.",
+      "file": "eda/duplicate_group_sizes.csv",
+      "producer": "eda",
+      "title": "Duplicate group sizes"
+    },
+    {
+      "columns": [
+        "duplicate_rows_all_inputs",
+        "duplicate_rows_group_key",
+        "group_key",
+        "groups",
+        "groups_with_copies",
+        "label_conflict_groups",
+        "rows",
+        "rows_in_groups_with_copies"
+      ],
+      "description": "Exact duplicates and label conflicts on the training rows.",
+      "file": "eda/duplicates_summary.json",
+      "producer": "eda",
+      "title": "Duplicates summary"
+    },
+    {
+      "columns": [
+        "column",
+        "missing_rows",
+        "missing_share",
+        "missing_Category_1",
+        "missing_Category_2",
+        "missing_Category_3",
+        "missing_Category_4",
+        "missing_Category_5",
+        "missing_Category_6"
+      ],
+      "description": "Missing values per input column, overall and per class (training portion).",
+      "file": "eda/missing_values.csv",
+      "producer": "eda",
+      "title": "Missing values"
+    },
+    {
+      "columns": [
+        "variable",
+        "categories",
+        "mutual_information_nats",
+        "normalized_mutual_information"
+      ],
+      "description": "Mutual information (nats) and normalized mutual information of each input view with the label.",
+      "file": "eda/mutual_information.csv",
+      "producer": "eda",
+      "title": "Mutual information with the label"
+    },
+    {
+      "columns": [
+        "period",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6",
+        "total"
+      ],
+      "description": "Rows per monthly period and class.",
+      "file": "eda/period_by_class.csv",
+      "producer": "eda",
+      "title": "Posting period by class"
+    },
+    {
+      "columns": [
+        "row_id",
+        "class",
+        "Col1",
+        "Col2",
+        "Col3",
+        "Col4",
+        "Col5",
+        "Col6",
+        "Col7"
+      ],
+      "description": "Every training row of Category_3 to Category_6.",
+      "file": "eda/rare_class_rows.csv",
+      "producer": "eda",
+      "title": "Rare class rows"
+    },
+    {
+      "columns": [
+        "raw_label",
+        "canonical_label",
+        "rows"
+      ],
+      "description": "Eleven raw label spellings and the six canonical classes they map to (full file).",
+      "file": "eda/raw_label_mapping.csv",
+      "producer": "eda",
+      "title": "Raw label spellings"
+    },
+    {
+      "columns": [
+        "column_details",
+        "columns",
+        "note",
+        "rows"
+      ],
+      "description": "Python types, uniques, missing values, and inferred role per column of the full raw file. Label-free structure only.",
+      "file": "eda/schema_summary.json",
+      "producer": "eda",
+      "title": "Schema audit (full file)"
+    },
+    {
+      "columns": [
+        "column",
+        "unique_values",
+        "missing_rows",
+        "token_vocabulary",
+        "mean_tokens",
+        "max_tokens",
+        "values_seen_once",
+        "in_sample_majority_purity"
+      ],
+      "description": "Unique values, token vocabulary, tokens per row, singletons, and in-sample majority purity per text column.",
+      "file": "eda/text_cardinality.csv",
+      "producer": "eda",
+      "title": "Text column cardinality"
+    },
+    {
+      "columns": [
+        "column_a",
+        "column_b",
+        "shared_tokens",
+        "example"
+      ],
+      "description": "Tokens shared between text columns. The same token plays different roles, so each column gets its own vectorizer.",
+      "file": "eda/token_overlap.csv",
+      "producer": "eda",
+      "title": "Token overlap across columns"
+    },
+    {
+      "columns": [
+        "value",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6",
+        "total"
+      ],
+      "description": "Most frequent Col1 values with class counts.",
+      "file": "eda/top_values_col1.csv",
+      "producer": "eda",
+      "title": "Top vendors (Col1)"
+    },
+    {
+      "columns": [
+        "value",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6",
+        "total"
+      ],
+      "description": "Most frequent Col4 values with class counts.",
+      "file": "eda/top_values_col4.csv",
+      "producer": "eda",
+      "title": "Top descriptions (Col4)"
+    },
+    {
+      "columns": [
+        "value",
+        "Category_1",
+        "Category_2",
+        "Category_3",
+        "Category_4",
+        "Category_5",
+        "Category_6",
+        "total"
+      ],
+      "description": "Most frequent Col6 values with class counts.",
+      "file": "eda/top_values_col6.csv",
+      "producer": "eda",
+      "title": "Top accounts (Col6)"
+    },
+    {
+      "columns": [
+        "row_id",
+        "column",
+        "raw_value",
+        "cleaned_value",
+        "model_input"
+      ],
+      "description": "Five training rows shown as the raw cell, the cleaned value, and the model input.",
+      "file": "preprocessing/before_after_samples.csv",
+      "producer": "eda",
+      "title": "Before and after samples"
+    },
+    {
+      "columns": [
+        "transformer",
+        "group",
+        "features",
+        "rows_with_nonzero_share",
+        "mean_nonzero_per_row"
+      ],
+      "description": "Number of features and sparsity per transformer of the fitted pipeline.",
+      "file": "preprocessing/feature_space_summary.csv",
+      "producer": "eda",
+      "title": "Feature space by transformer"
+    },
+    {
+      "columns": [
+        "coerced",
+        "matrix",
+        "resolved"
+      ],
+      "description": "Rows, columns, missing values, and dtypes at each stage: raw, resolved, coerced, and the final sparse matrix.",
+      "file": "preprocessing/stage_snapshots.json",
+      "producer": "eda",
+      "title": "Pipeline stage snapshots"
+    },
+    {
+      "columns": [
+        "dropped",
+        "transformers"
+      ],
+      "description": "Every transformer with its steps, parameters, reason, and decision id.",
+      "file": "preprocessing/transformer_catalog.json",
+      "producer": "eda",
+      "title": "Transformer catalog"
+    }
+  ]
+}

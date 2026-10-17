@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
@@ -45,6 +46,17 @@ SAMPLE_ROWS: list[list[object]] = [
         "Doc1",
     ],
 ]
+
+
+@pytest.fixture(autouse=True)
+def _restore_package_logger():
+    """Undo logging changes made by CLI tests, so caplog works in any test order."""
+    logger = logging.getLogger("ledgerclf")
+    saved = (logger.level, list(logger.handlers), logger.propagate)
+    yield
+    logger.setLevel(saved[0])
+    logger.handlers[:] = saved[1]
+    logger.propagate = saved[2]
 
 
 @pytest.fixture(scope="session")

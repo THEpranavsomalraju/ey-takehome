@@ -13,46 +13,44 @@ import sys
 from collections.abc import Callable, Sequence
 
 from ledgerclf import __version__
-from ledgerclf.config import Settings, get_settings
+from ledgerclf.config import (
+    EXIT_ENVIRONMENT_ERROR,
+    EXIT_INTERNAL_ERROR,
+    EXIT_OK,
+    EXIT_USER_ERROR,
+    Settings,
+    get_settings,
+)
 from ledgerclf.exceptions import ArtifactError, LedgerClfError
 from ledgerclf.logging_setup import configure
 
 logger = logging.getLogger(__name__)
 
-EXIT_OK = 0
-EXIT_USER_ERROR = 1
-EXIT_ENVIRONMENT_ERROR = 2
-EXIT_INTERNAL_ERROR = 3
-
 Handler = Callable[[argparse.Namespace, Settings], int]
 
 
 def echo(text: str = "") -> None:
-    """Print one line, escaping non-ASCII characters."""
+    """Print one line, escaping non-ASCII characters so any console can show it.
+
+    Args:
+        text: The line to print.
+    """
     print(text.encode("ascii", "backslashreplace").decode("ascii"), flush=True)
 
 
 def _cmd_doctor(args: argparse.Namespace, settings: Settings) -> int:
     from ledgerclf.doctor import format_report, run_doctor
 
-    report = run_doctor(settings, require_model=args.require_model, model_checks=_model_checks())
+    report = run_doctor(settings, require_model=args.require_model)
     for line in format_report(report):
         echo(line)
     return report.exit_code
 
 
-def _model_checks() -> Callable[[Settings], list] | None:
-    try:
-        from ledgerclf.artifacts import doctor_model_checks
-    except ImportError:
-        return None
-    return doctor_model_checks
-
-
 def _cmd_split(args: argparse.Namespace, settings: Settings) -> int:
     from ledgerclf.splitting import make_holdout_split
 
-    result = make_holdout_split(settings)
+    result = make_holdout_split(settings, force=args.force)
     manifest = result.manifest
     rows = manifest["rows"]
     echo(f"Holdout seed: {manifest['seed']} (seeds tried: {manifest['seeds_tried']})")
@@ -60,13 +58,26 @@ def _cmd_split(args: argparse.Namespace, settings: Settings) -> int:
     for side in ("train", "holdout"):
         counts = manifest["class_counts"][side]
         echo(f"{side:>8}: " + ", ".join(f"{k} {v}" for k, v in counts.items()))
-    echo("Wrote data/splits/ and data/holdout/")
+    for directory in (settings.paths.splits, settings.paths.holdout):
+        echo(f"Wrote {directory.relative_to(settings.paths.root).as_posix()}/")
+    return EXIT_OK
+
+
+def _cmd_eda(args: argparse.Namespace, settings: Settings) -> int:
+    from ledgerclf.eda import run_eda
+    from ledgerclf.preprocessing_reports import run_preprocessing_reports
+
+    written = run_eda(settings)
+    echo(f"Wrote {len(written)} EDA reports to reports/eda/ (labels: training portion only).")
+    written = run_preprocessing_reports(settings)
+    echo(f"Wrote {len(written)} preprocessing reports to reports/preprocessing/.")
     return EXIT_OK
 
 
 COMMANDS: dict[str, tuple[str, Handler]] = {
     "doctor": ("environment and artifact health check", _cmd_doctor),
     "split": ("label cleanup, group key, holdout seed rule, holdout files", _cmd_split),
+    "eda": ("EDA and preprocessing reports on the training portion", _cmd_eda),
 }
 
 
@@ -87,6 +98,10 @@ def _add_arguments(name: str, sub: argparse.ArgumentParser) -> None:
     if name == "doctor":
         sub.add_argument(
             "--require-model", action="store_true", help="fail when trained artifacts are missing"
+        )
+    if name == "split":
+        sub.add_argument(
+            "--force", action="store_true", help="replace an existing split even if it changes"
         )
 
 
@@ -116,10 +131,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_USER_ERROR
     except Exception:
         logger.debug("Unexpected error", exc_info=True)
-        echo(
-            "Internal error. Rerun with --verbose for details, then report the output. "
-            "Your data and artifacts were not changed."
-        )
+        echo("Internal error. Rerun the same command with --verbose and report the output.")
         return EXIT_INTERNAL_ERROR
 
 

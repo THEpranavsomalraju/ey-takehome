@@ -1,0 +1,12 @@
+statistic,value
+rows,5309.0
+missing,0.0
+min,-269111.58
+p25,360.0
+median,1080.0
+mean,134260.2711414579
+p75,4290.0
+max,8799523.59
+negative_rows,63.0
+zero_rows,2.0
+skewness,8.39190737250685

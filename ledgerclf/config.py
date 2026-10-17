@@ -17,6 +17,19 @@ PROJECT_ROOT = PACKAGE_ROOT.parent
 SUPPORTED_PYTHON = ((3, 11), (3, 14))
 FORCE_FALLBACK_ENV = "LEDGERCLF_FORCE_FALLBACK"
 
+# Exit codes shared by the CLI and the doctor (docs/02 section 10).
+EXIT_OK = 0
+EXIT_USER_ERROR = 1
+EXIT_ENVIRONMENT_ERROR = 2
+EXIT_INTERNAL_ERROR = 3
+
+# Excel stores dates as day counts from 1899-12-30; numbers in this range read as dates.
+EXCEL_SERIAL_RANGE = (20_000, 80_000)
+VALID_YEARS = (1900, 2200)
+MONTHS_PER_YEAR = 12
+
+HOLDOUT_FEATURES_STEM = "holdout_features"
+
 
 @dataclass(frozen=True)
 class Paths:
@@ -56,6 +69,11 @@ class Limits:
     predict_chunk_rows: int = 20_000
     csv_sniff_bytes: int = 64 * 1024
     csv_sniff_lines: int = 50
+    binary_sniff_bytes: int = 4096
+    header_max_chars: int = 200
+    message_value_chars: int = 40
+    message_detail_chars: int = 160
+    issue_rows_shown: int = 10
 
 
 @dataclass(frozen=True)
