@@ -149,7 +149,7 @@ function AgentSection({ uploadId, row, autoStart }: { uploadId: string; row: num
         <div>
           <h3 className="text-sm font-medium">Explanation</h3>
           <p className="text-xs text-muted-foreground">
-            A plain-language summary, the facts behind it, and what to check.
+            A short summary, the figures behind it, and what to check.
           </p>
         </div>
         <Button size="sm" onClick={ask} disabled={busy}>

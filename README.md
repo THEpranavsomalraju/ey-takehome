@@ -25,28 +25,32 @@ Nothing needs training or building: the trained models, reports, and built dashb
 
 ## What to look at
 
-1. **Data & Model tab.** From raw data to final model: exploration, cleaning and features, the split and testing, model choice, calibration, and the holdout result. Each chart has an **Explain** button that asks the AI about it.
-2. **Classify & Explain tab.** Upload `data/holdout/holdout_features.xlsx` (or click *Use the holdout sample*). Every line gets a category, a confidence, and a review decision. Click **Explain** on any row for the AI agent's explanation, the inputs that drove the prediction, and supporting evidence from past invoices.
-3. **Notebooks** (`notebooks/01_eda`, `02_preprocessing`, `03_modeling`), each readable on its own.
-4. **`MODEL_CARD.md`**: results, design choices, and limitations on one page.
+1. **Data & Model tab.** Goes from the raw data to the final model: exploration, cleaning and features, how the data was split and tested, model choice, calibration, and the holdout result. Each chart has an **Explain** button if you want the AI to walk through it.
+2. **Classify & Explain tab.** Upload `data/holdout/holdout_features.xlsx`, or click *Use the holdout sample*. Each line gets a category, a confidence, and a review decision. **Explain** on a row shows what drove the prediction, similar past invoices, and a short write-up from the agent.
+3. **Notebooks** in `notebooks/` (EDA, preprocessing, modeling). Each one reads on its own.
+4. **`MODEL_CARD.md`** for results, design choices, and limitations on one page.
 
-New to the terms? Open **Guide** in the dashboard header, or hover any dotted word.
+If a term is unfamiliar, hover the dotted word or open **Guide** in the header.
 
 ## How it works
 
-- **Validation.** Excel or CSV, with the original `Col1`..`Col7` headers, business names (Vendor, Amount, Posting date, GL account, ...), or no header at all. It also handles reordered columns, other encodings, currency strings, European numbers, and mixed date formats. Problems become warnings; every non-empty line gets a prediction.
-- **Features.** Words per text column (TF-IDF), recurring vendors, accounts and vendor-account pairs, the amount (signed log plus credit and round flags), and the posting month. Col2, the invoice number, is an identifier and is not used.
-- **Model.** A log-odds blend of logistic regression and LightGBM, calibrated so stated confidence matches observed accuracy. Each prediction splits exactly into per-input contributions.
-- **Testing.** 10% held out before any analysis. All development used grouped cross-validation, because a quarter of the rows are exact copies of other rows and a random split would test the model on rows it had already seen.
-- **Review.** Lines below 80% confidence, or with a critical warning such as a new vendor or GL account, go to a person. Warnings never block a prediction.
+Uploads can be Excel or CSV, with the original `Col1`..`Col7` headers, business names like Vendor, Amount, or GL account, or no header at all. The reader also copes with reordered columns, other encodings, currency strings, European number formats, and mixed date formats. Anything odd becomes a warning on the row instead of an error, so every non-empty line still gets a prediction.
+
+Features are TF-IDF words for each text column, indicators for recurring vendors, accounts, and vendor-account pairs, the amount as a signed log with credit and round-number flags, and the posting month. Col2 is an invoice number, so it isn't used.
+
+The model is a blend of logistic regression and LightGBM, averaged in log-odds and then temperature-calibrated. Both parts are additive, so each prediction breaks down into per-input contributions, which is what the explanations show.
+
+I set aside 10% of the data before looking at anything and scored it once at the end. Everything else used grouped cross-validation: about a quarter of the rows are copies of other rows, and a random split would have tested the model on rows it had already seen (it inflates accuracy by about 1.4 points).
+
+Lines under 80% confidence, or with a critical warning such as a new vendor or GL account, go to review. They still get a prediction.
 
 ## The AI agent
 
-The agent runs only when asked. It explains a row from the model's exact figures and the training history, and every number it quotes is checked against them. It uses Claude (`claude-haiku-5-5`) through the first route that works:
+The agent only runs when you click Explain. It works from the model's contribution figures and the training history, and the app rejects an answer that quotes a number not found in those figures. It calls Claude (`claude-haiku-5-5`) using the first option that works:
 
-1. **Your own key** (optional): typed into the dashboard settings, or `ANTHROPIC_API_KEY` in the environment or a `.env` file.
-2. **The project relay** (no setup): a small hosted function (`relay/`) that holds the project's key and forwards only this app's explanation requests. It exists so graders don't need their own key. It only accepts this app's two prompts and has a rate limit and a spend cap.
-3. **Offline**: if Claude is unreachable (no internet, relay down, key revoked), the app writes a plain explanation from the same figures and labels it as offline. Nothing else in the app depends on the relay.
+1. **Your own key**, if you have one: paste it into the dashboard settings, or set `ANTHROPIC_API_KEY` in the environment or a `.env` file.
+2. **The project relay**, with no setup needed. This is a small Vercel function (`relay/`) that holds my key and only forwards this app's two prompts, with a rate limit and a spend cap. It's there so you don't need a key to try the agent.
+3. **Offline.** If Claude can't be reached (no internet, relay down), the app builds the explanation itself from the same figures and labels it as offline. The rest of the app doesn't depend on the relay.
 
 ## Command line
 

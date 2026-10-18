@@ -20,7 +20,7 @@ function stages(model: ModelInfo | null) {
     {
       icon: FileSpreadsheetIcon,
       title: "Read and validate",
-      text: "Any Excel or CSV layout: header detection, column mapping, encodings, delimiters. Problems become warnings; every row is kept.",
+      text: "Excel or CSV in most layouts: finds the header, maps the columns, handles encodings and delimiters. Problems become warnings and rows are kept.",
     },
     {
       icon: LayersIcon,
@@ -42,7 +42,7 @@ function stages(model: ModelInfo | null) {
     {
       icon: SparklesIcon,
       title: "Explanation",
-      text: "Exact per-input contributions plus training evidence; Claude turns them into plain language on request.",
+      text: "Per-input contributions and similar past invoices. Claude writes them up when you click Explain.",
     },
   ]
 }

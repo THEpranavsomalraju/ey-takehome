@@ -42,8 +42,8 @@ export function ClassifyTab() {
         <div className="space-y-2 text-center">
           <h1 className="text-2xl font-semibold tracking-tight">Classify a ledger</h1>
           <p className="text-sm text-muted-foreground">
-            Every row gets a category, a confidence, and a review decision. Click any row to see
-            exactly why, and ask the AI agent for a plain-language explanation.
+            Upload a file to get a category, a confidence, and a review decision for each line.
+            Explain on a line shows what drove the prediction.
           </p>
         </div>
         <UploadPanel busy={busy} onFile={onFile} onSample={onSample} />
