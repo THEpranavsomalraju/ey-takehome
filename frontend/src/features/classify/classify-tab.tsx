@@ -18,6 +18,7 @@ export function ClassifyTab() {
   const [query, setQuery] = useState<RowQuery>(EMPTY_QUERY)
   const [selected, setSelected] = useState<number | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [autoExplain, setAutoExplain] = useState(false)
 
   const run = useCallback((request: () => Promise<Upload>) => {
     setBusy(true)
@@ -119,11 +120,23 @@ export function ClassifyTab() {
         selectedRow={drawerOpen ? selected : null}
         onSelect={(row) => {
           setSelected(row)
+          setAutoExplain(false)
+          setDrawerOpen(true)
+        }}
+        onExplain={(row) => {
+          setSelected(row)
+          setAutoExplain(true)
           setDrawerOpen(true)
         }}
       />
 
-      <RowSheet uploadId={upload.upload_id} row={selected} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+      <RowSheet
+        uploadId={upload.upload_id}
+        row={selected}
+        open={drawerOpen}
+        autoExplain={autoExplain}
+        onClose={() => setDrawerOpen(false)}
+      />
     </div>
   )
 }

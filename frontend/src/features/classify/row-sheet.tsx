@@ -28,11 +28,13 @@ export function RowSheet({
   uploadId,
   row,
   open,
+  autoExplain,
   onClose,
 }: {
   uploadId: string
   row: number | null
   open: boolean
+  autoExplain: boolean
   onClose: () => void
 }) {
   const key = `${uploadId}:${row}`
@@ -68,7 +70,7 @@ export function RowSheet({
             {payload && row != null && (
               <>
                 <PredictionHeader payload={payload} />
-                <AgentSection key={key} uploadId={uploadId} row={row} />
+                <AgentSection key={key} uploadId={uploadId} row={row} autoStart={autoExplain} />
                 <Separator />
                 <DriversSection payload={payload} />
                 <ProbabilitySection payload={payload} />
@@ -118,19 +120,28 @@ function PredictionHeader({ payload }: { payload: ExplanationPayload }) {
   )
 }
 
-function AgentSection({ uploadId, row }: { uploadId: string; row: number }) {
+function AgentSection({ uploadId, row, autoStart }: { uploadId: string; row: number; autoStart: boolean }) {
   const { apiKey, useLlm } = useSettings()
   const [answer, setAnswer] = useState<AgentAnswer | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState(autoStart)
 
-  const ask = () => {
-    setBusy(true)
+  const request = () =>
     api
       .explain(uploadId, row, useLlm, apiKey || null)
       .then((r) => setAnswer(r.answer))
       .catch((e: Error) => toast.error(e.message))
       .finally(() => setBusy(false))
+
+  const ask = () => {
+    setBusy(true)
+    request()
   }
+
+  // Opened from a row's Explain button: ask the agent straight away (once per row).
+  useEffect(() => {
+    if (autoStart) request()
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <section className="space-y-3 rounded-lg border bg-muted/20 p-4">

@@ -1,170 +1,93 @@
 # Ledger Classifier: EY AI Technical Assessment
 
-This project suggests the classification label for lines of an accounts payable ledger. It is trained on an anonymized ledger of 5,899 invoice lines (inputs `Col1` to `Col7`, six categories), and it also includes:
+A model that suggests the category of each accounts payable invoice line, with a dashboard to explore how it was built, classify a file, and have an AI agent explain any prediction.
 
-- a dashboard with an AI agent that explains any single prediction in plain language;
-- a prediction service that accepts messy real-world Excel and CSV files.
-
-| | Result |
+| | |
 |---|---|
-| Holdout accuracy (590 rows never seen in development, scored once) | **97.1%** |
-| Grouped cross-validation accuracy (the expected accuracy on new data) | **95.4%** (always guessing the most common category: 88.4%) |
-| Rows sent to a person for review / accuracy of the rest (holdout) | 8.8% / 98.9% |
+| Holdout accuracy (590 lines set aside before any work, scored once) | **97.1%** |
+| Expected accuracy on new data (grouped cross-validation) | **95.4%** |
+| Always guessing the most common category | 88.4% |
+| Lines sent to a person for review / accuracy of the rest (holdout) | 8.8% / 98.9% |
 
-## A 10-minute tour for graders
+## Run it
 
-1. **Run the dashboard** (Quick start below). Tab 1 tells the data and modeling story. In Tab 2, upload `data/holdout/holdout_features.xlsx` and click **Explain** on any row.
-2. **Read the notebooks** in order. Each one stands on its own:
-   - `notebooks/01_eda.ipynb`: what is in the data and what it changed in the model.
-   - `notebooks/02_preprocessing.ipynb`: every step from a raw spreadsheet cell to the feature matrix.
-   - `notebooks/03_modeling.ipynb`: validation design, model comparison, tuning, the final choice, calibration, and the holdout result.
-3. **Skim `MODEL_CARD.md`**: results, key design choices, and limitations on one page.
-
-## Requirements
-
-- Python 3.11 to 3.14 (3.12 recommended).
-- Windows 10/11, macOS 13+, or Linux x86_64.
-- No internet access at runtime, except for the optional AI agent.
-- macOS only: run `brew install libomp` so LightGBM can load. Without it, the app runs on the fallback model and `doctor` says so.
-
-## Install
-
-macOS / Linux:
+Python 3.11 to 3.14. On macOS, run `brew install libomp` first so LightGBM can load (without it the app still runs, on a logistic-regression fallback).
 
 ```
-python3.12 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+source .venv/bin/activate              # Windows: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install -e . --no-deps
+python -m ledgerclf serve              # opens http://127.0.0.1:8000
 ```
 
-Windows PowerShell:
+Nothing needs training or building: the trained models, reports, and built dashboard are included. `python -m ledgerclf doctor` checks the setup if anything looks wrong.
 
-```
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m pip install -e . --no-deps
-```
+## What to look at
 
-The last line registers the package so that `python -m ledgerclf` works from any folder. The trained models, the holdout files, and every report ship with the project, so nothing needs to be retrained. For the tests and notebooks, also run `python -m pip install -r requirements-dev.txt`.
+1. **Data & Model tab.** The story from raw data to final model: exploration, preprocessing, honest testing, model choice, calibration, and the holdout result. Every chart says what it shows and why it matters, and has an **Explain** button for an AI explanation.
+2. **Classify & Explain tab.** Upload `data/holdout/holdout_features.xlsx` (or click *Use the holdout sample*). Every line gets a category, a confidence, and a review decision. Click **Explain** on any row for the AI agent's explanation, the inputs that drove the prediction, and supporting evidence from past invoices.
+3. **Notebooks** (`notebooks/01_eda`, `02_preprocessing`, `03_modeling`), each readable on its own.
+4. **`MODEL_CARD.md`**: results, design choices, and limitations on one page.
 
-## Quick start
-
-```
-python -m ledgerclf doctor                                   check the environment and model files
-python -m ledgerclf serve                                    dashboard at http://127.0.0.1:8000
-python -m ledgerclf predict data/holdout/holdout_features.xlsx --out predictions.csv
-python -m ledgerclf explain data/holdout/holdout_features.xlsx --row 1
-```
-
-The API documentation is at http://127.0.0.1:8000/docs while the server runs.
-
-## The dashboard
-
-- **Data & Model** is the story, section by section: category balance, when categories occur, which inputs carry the label, why testing is grouped, the model comparison, what each input is worth, class weights, calibration, an interactive review-threshold explorer, warning reliability, the holdout result, and the feature pipeline. Most charts have a control to switch what they show, and every panel ends with a one-line takeaway.
-- **Classify & Explain** takes any Excel or CSV upload (or the holdout sample). It shows validation messages, accuracy if the file has labels, and charts that filter the table when clicked. The table can be searched, filtered, and sorted, with 25 rows per page. Clicking a row opens its explanation: what drove the prediction (exact contributions), the probability of each category, evidence from past invoices, warnings, an on-demand AI explanation, and a **What if?** box that re-scores the row with one input changed.
-- **Every chart has an Explain button.** Claude explains the chart in plain language from the chart's own data: what you are looking at, what the numbers say, and why it matters, with a short technical note. Every number it quotes is checked against that data. Without Claude, the chart's built-in summary is shown. Answers are cached, so a repeat click costs nothing.
-- The header shows the active model (click for details and an environment check), the agent route, and settings for an optional personal API key.
-
-The built dashboard ships in `frontend/dist`, so no Node.js is needed. To change and rebuild it: `cd frontend`, `npm ci`, `npm run build` (Node 20 or newer).
+New to the terms? Open **Guide** in the dashboard header, or hover any dotted word.
 
 ## How it works
 
-1. **Validation.** Any Excel (.xlsx, .xls) or CSV file is read: odd encodings, delimiters, title rows above the header, shuffled or renamed columns, currency strings, European numbers, and mixed date formats are all handled. Problems become clear warnings, and **every non-empty row gets a prediction**.
-2. **Features.** Each text column (vendor, description, GL account) gets its own TF-IDF vocabulary. Recurring vendors, accounts, and vendor-account pairs get one-hot indicators. The amount enters as a signed log plus flags for credits and round amounts, and the posting date as a month index. Col2, the invoice number, is an identifier and is not used.
-3. **Model.** A blend of logistic regression and LightGBM, combined in log-odds space. Every prediction can be split exactly into contributions from each input, which the explanations use. Confidence is calibrated, so "90%" means right about 9 times out of 10.
-4. **Review routing.** Rows below 80% confidence, or with a new vendor or GL account, are flagged for a person. Flags never block a prediction.
-5. **Explanations.** On request, the agent explains one row. It gives a plain-language summary, then the exact facts: the probability, each input's contribution, and how past invoices with the same vendor and account were labeled. Then it says what a reviewer should check.
+- **Validation.** Any Excel or CSV layout is read: header detection, renamed or reordered columns, encodings, currency strings, European numbers, mixed date formats. Problems become warnings; every non-empty line gets a prediction.
+- **Features.** Words per text column (TF-IDF), recurring vendors, accounts and vendor-account pairs, the amount (signed log plus credit and round flags), and the posting month. Col2, the invoice number, is an identifier and is not used.
+- **Model.** A log-odds blend of logistic regression and LightGBM, calibrated so stated confidence matches observed accuracy. Each prediction splits exactly into per-input contributions.
+- **Testing.** 10% held out before any analysis. All development used grouped cross-validation, because a quarter of the rows are exact copies of other rows and a random split would test the model on rows it had already seen.
+- **Review.** Lines below 80% confidence, or with a critical warning such as a new vendor or GL account, go to a person. Warnings never block a prediction.
 
 ## The AI agent
 
-The agent explains one row when asked, never in advance. It answers only from the model's own figures for that row and from the training history, and every number it quotes is checked against those figures. It reaches Claude (`claude-haiku-5-5`) by the first route that works:
+The agent runs only when asked. It explains a row from the model's exact figures and the training history, and every number it quotes is checked against them. It uses Claude (`claude-haiku-5-5`) through the first route that works:
 
-1. **Your own Anthropic key**, typed into the dashboard for the session, or set before `serve`:
-   - macOS / Linux: `export ANTHROPIC_API_KEY=...`
-   - PowerShell: `$env:ANTHROPIC_API_KEY="..."`
-   - or a line `ANTHROPIC_API_KEY=...` in a `.env` file in the project folder
-2. **The project relay (no setup needed).** A small hosted function (source in `relay/`) holds the project's key on the server and forwards only this agent's explanation requests.
-3. **Offline explanation.** If neither route answers (no internet, a firewall, an outage), you get the same structured explanation built directly from the model's figures. It is labeled as offline, and the app keeps working.
+1. **Your own key** (optional): typed into the dashboard settings, or `ANTHROPIC_API_KEY` in the environment or a `.env` file.
+2. **The project relay** (no setup): a small hosted function (`relay/`) that holds the project's key and forwards only this app's explanation requests.
+3. **Offline**: if Claude is unreachable, a structured explanation built from the same figures, clearly labeled.
 
-`GET /api/agent/status` shows which route is active. Corporate networks that inspect TLS traffic work, because the client uses the operating system's certificate store.
-
-## All commands
+## Command line
 
 ```
-python -m ledgerclf doctor [--require-model]     environment and model health check
-python -m ledgerclf split [--force]              label cleanup, duplicate groups, holdout split
-python -m ledgerclf eda                          exploration reports (training rows only)
-python -m ledgerclf benchmark [--quick]          model comparison, ablations, validation schemes
-python -m ledgerclf tune [--quick]               logged hyperparameter search and nested CV
-python -m ledgerclf select                       final model choice, calibration, review threshold
-python -m ledgerclf train                        final fit on the training rows, model files
-python -m ledgerclf evaluate-holdout --confirm   the single holdout evaluation (already run once)
-python -m ledgerclf predict FILE [--out CSV]
-python -m ledgerclf explain FILE --row N [--out JSON]
-python -m ledgerclf serve [--host H] [--port P] [--no-browser]
+python -m ledgerclf predict FILE [--out predictions.csv]
+python -m ledgerclf explain FILE --row N
+python -m ledgerclf serve [--port 8010]
 ```
 
-Exit codes: 0 success, 1 problem with the input (the message says how to fix it), 2 environment or model-file problem, 3 internal error (rerun with `--verbose`).
-
-## Reproduce everything from the raw file
+Rebuild everything from the raw file (deterministic, same results):
 
 ```
 python -m ledgerclf split
 python -m ledgerclf eda
-python -m ledgerclf benchmark
+python -m ledgerclf benchmark          # add --quick for a short run
 python -m ledgerclf tune
 python -m ledgerclf select
 python -m ledgerclf train
 python tools/compare_golden.py --tolerance same-machine
 ```
 
-`split` reproduces the shipped holdout split byte for byte, and it refuses to change it silently. Every step is deterministic: fixed seeds, and single-threaded, deterministic LightGBM. `compare_golden.py` checks that a retrained model gives the same predictions as the shipped one. `benchmark` and `tune` take the longest; `--quick` cuts each to a few minutes.
+Tests: `python -m pip install -r requirements-dev.txt`, then `python -m pytest` (555 tests, including 79 catalogued edge cases and 75 hostile-input tests). Re-run the notebooks with `python tools/run_notebooks.py`.
 
-## Tests
-
-```
-python -m pytest                     about 500 tests: units, 79 catalogued edge cases,
-                                     72 hostile-input tests, API and agent, portability
-python tools/run_notebooks.py        re-execute the three notebooks
-```
-
-## Project structure
+## Project layout
 
 ```
-ledgerclf/        the Python package
-  io, schema, values, labels       reading and validating any uploaded file
-  splitting                        duplicate groups and the holdout split
-  features                         the feature pipeline (single source of feature logic)
-  models, evaluation, calibration  models, grouped cross-validation, calibration
-  benchmark, tuning, selection     model comparison, search, final choice
-  training, predict, explain       final fit, predictions, exact explanations
-  flags, reference, overlap        review flags and training-history evidence
-  service, server, table_views     the facade used by the dashboard, the HTTP API, table pages
-  agent, agent_tools               the Claude explanation agent and its read-only tools
-  chart_explainer                  grounded AI explanations of the dashboard's charts
-  cli                              python -m ledgerclf ...
-frontend/         the dashboard: React + shadcn/ui source, built files in frontend/dist
-notebooks/        01 exploration, 02 preprocessing, 03 modeling
-data/raw/         Challenge_Data.xls (original, never modified)
-data/splits/      holdout row ids and the split record
-data/holdout/     holdout_features.xlsx/.csv (upload these), holdout labels
-artifacts/        trained models, training statistics, reference predictions
-reports/          every table behind the notebooks and the dashboard (reports/manifest.json)
-relay/            the hosted relay that lets the agent run without a key
-tests/            the test suite
+ledgerclf/    Python package: reading and validation, features, models, evaluation,
+              prediction service, HTTP API (server.py), AI agent (agent.py, chart_explainer.py)
+frontend/     dashboard source (React, shadcn/ui); built files in frontend/dist
+notebooks/    exploration, preprocessing, modeling
+data/         raw file, holdout split, holdout files to upload
+artifacts/    trained models and training statistics
+reports/      every table behind the notebooks and dashboard
+relay/        hosted relay for the AI agent
+tests/        test suite
 ```
 
 ## Troubleshooting
 
-- **`doctor` says LightGBM cannot load (macOS).** Run `brew install libomp`. Until then, the fallback model (95.3% holdout accuracy) is used and everything else works.
-- **`No module named ledgerclf`.** Run `python -m pip install -e . --no-deps` inside the activated virtual environment.
-- **Wrong Python version.** Use Python 3.11 to 3.14; on Windows, `py -3.12`.
-- **The agent answers "offline".** No key is set and the relay cannot be reached (no internet or a firewall). The offline explanation uses the same exact figures.
-- **Port 8000 is in use.** `python -m ledgerclf serve --port 8010`.
-- **Guaranteed environment.** Build and run the Docker image:
-  ```
-  docker build -t ledgerclf .
-  docker run --rm -p 8000:8000 ledgerclf python -m ledgerclf serve --host 0.0.0.0 --no-browser
-  ```
+- **LightGBM cannot load (macOS):** `brew install libomp`. Until then the fallback model (95.3% holdout accuracy) runs.
+- **`No module named ledgerclf`:** run `python -m pip install -e . --no-deps` in the activated environment.
+- **Agent says "offline":** no internet or a firewall; the offline explanation uses the same figures.
+- **Port in use:** `python -m ledgerclf serve --port 8010`.
+- **Docker:** `docker build -t ledgerclf .` then `docker run --rm -p 8000:8000 ledgerclf python -m ledgerclf serve --host 0.0.0.0 --no-browser`.

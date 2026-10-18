@@ -1,12 +1,8 @@
-"""POST /api/whatif must read an edited date in the upload's own day and month order.
+"""POST /api/whatif reads an edited date in the upload's own day and month order.
 
-docs/05 section 2.5 infers day-first versus month-first per column: one value
-such as ``31/08/2018`` makes the whole column day-first. The what_if tool
-re-coerces only the edited row, so an ambiguous edit such as ``04/02/2018`` in a
-day-first upload reads as April, while re-uploading the edited file reads it
-as February (``2018-02``). The tool promises "the same cleaning as an upload,
-so the answer matches re-uploading the row", and the dashboard shows no hint of
-the month it picked, so this is a silent wrong parse.
+The upload decides the date order for the whole Col5 column (one value such as
+``31/08/2018`` makes it day-first). An edited date such as ``04/02/2018`` must
+then mean 4 February, exactly as if the edited file were uploaded again.
 """
 
 from __future__ import annotations

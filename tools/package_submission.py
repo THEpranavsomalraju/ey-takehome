@@ -63,6 +63,7 @@ EXCLUDE_PATTERNS = (
     "*.egg-info",
     ".coverage",
     ".coverage.*",
+    ".gitignore",
 )
 SECRET_PATTERNS = (
     re.compile(rb"sk-ant-[A-Za-z0-9_\-]{16,}"),

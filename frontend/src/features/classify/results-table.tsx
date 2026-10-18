@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, XIcon } from "lucide-react"
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, SearchIcon, SparklesIcon, XIcon } from "lucide-react"
 
 import { ClassLabel } from "@/components/blocks"
 import { CategoryHint } from "@/components/category-guide"
@@ -29,6 +29,7 @@ export function ResultsTable({
   labeled,
   selectedRow,
   onSelect,
+  onExplain,
 }: {
   uploadId: string
   insights: Insights
@@ -37,6 +38,7 @@ export function ResultsTable({
   labeled: boolean
   selectedRow: number | null
   onSelect: (row: number) => void
+  onExplain: (row: number) => void
 }) {
   // The page position belongs to one query: a new filter or search starts at page 1.
   const [position, setPosition] = useState<{ query: RowQuery; offset: number }>({ query, offset: 0 })
@@ -159,13 +161,14 @@ export function ResultsTable({
               <TableHead className="w-32">Confidence</TableHead>
               <TableHead>Status</TableHead>
               {labeled && <TableHead>True label</TableHead>}
+              <TableHead className="w-20 text-right">AI</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!page
               ? Array.from({ length: 10 }, (_, i) => (
                   <TableRow key={i}>
-                    <TableCell colSpan={labeled ? 11 : 10}>
+                    <TableCell colSpan={labeled ? 12 : 11}>
                       <Skeleton className="h-5 w-full" />
                     </TableCell>
                   </TableRow>
@@ -177,11 +180,12 @@ export function ResultsTable({
                     labeled={labeled}
                     selected={row.row_number === selectedRow}
                     onSelect={onSelect}
+                    onExplain={onExplain}
                   />
                 ))}
             {page && page.rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={labeled ? 11 : 10} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={labeled ? 12 : 11} className="py-10 text-center text-muted-foreground">
                   No rows match these filters.
                 </TableCell>
               </TableRow>
@@ -192,7 +196,7 @@ export function ResultsTable({
       </ScrollArea>
 
       <div className="flex items-center justify-between gap-2 border-t px-3 py-2 text-xs text-muted-foreground">
-        <span className="hidden sm:inline">Click a row to see why it got its prediction.</span>
+        <span className="hidden sm:inline">Click a row for its details, or Explain for the AI agent's explanation.</span>
         <div className="flex items-center gap-2">
           <span className="tabular">
             Page {current} of {pages}
@@ -214,11 +218,13 @@ function ResultRow({
   labeled,
   selected,
   onSelect,
+  onExplain,
 }: {
   row: PredictionRow
   labeled: boolean
   selected: boolean
   onSelect: (row: number) => void
+  onExplain: (row: number) => void
 }) {
   const flags = flagCodes(row.flags)
   return (
@@ -289,6 +295,21 @@ function ResultRow({
           )}
         </TableCell>
       )}
+      <TableCell className="text-right">
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 gap-1 px-2 text-xs"
+          aria-label={`Explain row ${row.row_number}`}
+          onClick={(e) => {
+            e.stopPropagation()
+            onExplain(row.row_number)
+          }}
+        >
+          <SparklesIcon className="size-3.5" />
+          Explain
+        </Button>
+      </TableCell>
     </TableRow>
   )
 }

@@ -1,15 +1,8 @@
-"""The offline explanation must not name a negligible input as the main reason.
+"""The offline explanation names the input that actually drove the prediction.
 
-For an extreme amount (1e50) with every text value unseen, the amount group
-carries the margin (about +5.3 log-odds against a total of +2.7, with the base
-rate pulling -4.9 and the next supporting group under +1.2). Yet the offline
-Summary of POST /api/explain (use_llm false) says the prediction holds "mainly
-because 517 of 4166 past invoices with the same document flag (Col7) were
-Category_2", a group that contributes about +0.02. ``_main_reason`` skips every
-supporting group without training evidence (amount and period never have any)
-and cites the first one that has some, however small. DECISIONS.md
-(explanations) requires the Summary to state the model facts; a "main reason"
-that the payload contradicts is not one.
+With an extreme amount (1e50) and unseen text, the amount carries most of the
+margin. The summary's "main reason" must name the amount, not a weak input that
+happens to have training history (such as the document flag).
 """
 
 from __future__ import annotations
