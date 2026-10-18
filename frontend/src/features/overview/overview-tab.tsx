@@ -4,40 +4,41 @@ import { Panel, Section } from "@/components/blocks"
 import { CategoryCards } from "@/components/category-guide"
 import { Term } from "@/components/term"
 import { CATEGORY_CAVEAT } from "@/lib/categories"
-import { IntroCard } from "./intro-card"
 import { cn } from "@/lib/utils"
+import { AmountPanel, BeforeAfterPanel, LabelCleanupPanel, MissingValuesPanel } from "./cleaning-panels"
 import { ClassDistributionPanel, DuplicateStats, MonthlyVolumePanel, SignalPanel } from "./data-panels"
 import { ConfusionPanel, HeadlineStats, PerClassPanel } from "./holdout-panels"
+import { IntroCard } from "./intro-card"
 import { AblationPanel, ClassWeightPanel, LeaderboardPanel, ValidationPanel } from "./model-panels"
 import { FeatureCatalogPanel, PipelineFlow, TuningStats } from "./pipeline-panels"
 import { CalibrationPanel, FlagReliabilityPanel, ThresholdPanel } from "./trust-panels"
 
 const SECTIONS = [
   { id: "results", label: "Results" },
-  { id: "data", label: "The data" },
-  { id: "validation", label: "Honest testing" },
+  { id: "data", label: "Exploration" },
+  { id: "cleaning", label: "Cleaning & features" },
+  { id: "split", label: "Split & testing" },
   { id: "models", label: "Model choice" },
-  { id: "trust", label: "Confidence & review" },
-  { id: "holdout", label: "Holdout detail" },
-  { id: "pipeline", label: "Pipeline" },
+  { id: "review", label: "Confidence & review" },
+  { id: "holdout", label: "Holdout results" },
 ]
+const HEADER_OFFSET = 140 // sticky header plus a little margin, in pixels
 
-/** Highlight the section currently in view in the side navigation. */
+/** The section whose top has scrolled past the sticky header. */
 function useActiveSection() {
   const [active, setActive] = useState(SECTIONS[0].id)
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
-        if (visible[0]) setActive(visible[0].target.id)
-      },
-      { rootMargin: "-120px 0px -60% 0px" },
-    )
-    SECTIONS.forEach((s) => {
-      const element = document.getElementById(s.id)
-      if (element) observer.observe(element)
-    })
-    return () => observer.disconnect()
+    const update = () => {
+      let current = SECTIONS[0].id
+      for (const s of SECTIONS) {
+        const element = document.getElementById(s.id)
+        if (element && element.getBoundingClientRect().top <= HEADER_OFFSET) current = s.id
+      }
+      setActive(current)
+    }
+    update()
+    window.addEventListener("scroll", update, { passive: true })
+    return () => window.removeEventListener("scroll", update)
   }, [])
   return active
 }
@@ -68,10 +69,10 @@ export function OverviewTab() {
         <Section
           id="results"
           eyebrow="Results"
-          title="An invoice classifier that knows when to ask for help"
+          title="Accounts payable line classifier"
           description={
             <>
-              The model suggests one of six categories for every accounts payable line, says how sure it is, and sends uncertain or unfamiliar lines to a person. The <Term name="holdout" /> figures come from 590 lines never used during development; the expected accuracy is the <Term name="grouped cross-validation" /> estimate.
+              The model suggests one of six categories for each invoice line and sends uncertain or unfamiliar lines to a person. The <Term name="holdout" /> figures come from 590 lines set aside before any analysis; the expected accuracy is the <Term name="grouped cross-validation" /> estimate.
             </>
           }
         >
@@ -81,50 +82,68 @@ export function OverviewTab() {
 
         <Section
           id="data"
-          eyebrow="1 - The data"
+          eyebrow="1. Exploration"
           title="5,899 anonymized invoice lines, one dominant category"
-          description="Seven inputs (vendor, invoice number, amount, description, posting date, GL account, document flag) and a label. 10% was set aside as the holdout before any analysis; everything below uses the 5,309 training rows."
+          description="Seven inputs and a label. Everything in this section uses the 5,309 training lines; the holdout stays untouched."
         >
           <div className="grid gap-4 lg:grid-cols-2">
             <ClassDistributionPanel />
             <MonthlyVolumePanel />
           </div>
-          <Panel
-            title="What each category looks like"
-            explain={{ chart: "category-profiles" }}
-            description={CATEGORY_CAVEAT}
-            why="The category names are hidden, so these profiles are the best description of what the model is choosing between. Hover a category anywhere in the Classify tab to see its profile."
-          >
-            <CategoryCards />
-          </Panel>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <MissingValuesPanel />
+            <AmountPanel />
+          </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <SignalPanel />
             <Panel
               title="Repeated rows"
+              description="Lines that are exact copies of an earlier line, apart from the invoice number."
+              why="Copies split across training and test would make the test too easy, so every test keeps them together."
               explain={{ chart: "repeated-rows" }}
-              description="Invoice lines that are exact copies of an earlier line, apart from the invoice number."
-              why="If one copy is used for training and another for testing, the test is too easy. This is why every test keeps copies together."
-              takeaway="A quarter of the rows repeat an earlier row exactly, and copies almost always share a label. The model can learn these patterns, but testing must keep copies apart (next section)."
+              takeaway="A quarter of the lines repeat an earlier line, and copies almost always share a label."
             >
               <DuplicateStats />
             </Panel>
           </div>
+          <Panel
+            title="What each category looks like"
+            description={CATEGORY_CAVEAT}
+            why="Hover a category in the Classify tab to see its profile there."
+            explain={{ chart: "category-profiles" }}
+          >
+            <CategoryCards />
+          </Panel>
         </Section>
 
         <Section
-          id="validation"
-          eyebrow="2 - Honest testing"
-          title="Grouped cross-validation, out-of-time, and a single holdout"
-          description="Copies of a row always stay on the same side of a split, and every preprocessing step is fitted inside each training fold. Otherwise the model would be tested on rows it had effectively already seen."
+          id="cleaning"
+          eyebrow="2. Cleaning and features"
+          title="From a spreadsheet cell to model input"
+          description="The same code runs for training, the holdout, and every uploaded file, so nothing is prepared by hand."
+        >
+          <PipelineFlow />
+          <div className="grid gap-4 lg:grid-cols-[2fr_3fr]">
+            <LabelCleanupPanel />
+            <BeforeAfterPanel />
+          </div>
+          <FeatureCatalogPanel />
+        </Section>
+
+        <Section
+          id="split"
+          eyebrow="3. Split and testing"
+          title="A 10% holdout, then grouped cross-validation"
+          description="590 lines (10%) were set aside first and scored once at the end. All development used the other 5,309 lines with grouped folds: copies of a line stay on the same side of a split, and every preprocessing step is fitted inside each training fold."
         >
           <ValidationPanel />
         </Section>
 
         <Section
           id="models"
-          eyebrow="3 - Model choice"
-          title="Eleven candidates, one rule fixed before tuning"
-          description="Baselines, linear models, naive Bayes, gradient boosting, and two blends were compared on identical folds. The final model was picked by a rule written down in advance: the most accurate model that also handles rare categories and later months well."
+          eyebrow="4. Model choice"
+          title="Eleven models compared, one picked by a rule set in advance"
+          description="Baselines, linear models, naive Bayes, gradient boosting, and two blends ran on identical folds. The rule, written before tuning: the most accurate model that also handles rare categories and later months."
         >
           <LeaderboardPanel />
           <div className="grid gap-4 lg:grid-cols-2">
@@ -135,10 +154,10 @@ export function OverviewTab() {
         </Section>
 
         <Section
-          id="trust"
-          eyebrow="4 - Confidence and review"
+          id="review"
+          eyebrow="5. Confidence and review"
           title="Calibrated confidence decides what a person checks"
-          description="A confidence score is only useful if it is honest. After calibration, the review threshold and the warning flags route the risky rows to a reviewer."
+          description="After calibration, a confidence threshold and a set of warnings decide which lines go to a reviewer."
         >
           <div className="grid gap-4 lg:grid-cols-2">
             <CalibrationPanel />
@@ -149,24 +168,14 @@ export function OverviewTab() {
 
         <Section
           id="holdout"
-          eyebrow="5 - Holdout detail"
+          eyebrow="6. Holdout results"
           title="The final check on unseen data"
-          description="The holdout was scored exactly once, with the final model as trained above. Switch to cross-validation to compare with the development estimate."
+          description="Scored once, with the final model as trained above. Switch to cross-validation to compare with the development estimate."
         >
           <div className="grid gap-4 lg:grid-cols-2">
             <ConfusionPanel />
             <PerClassPanel />
           </div>
-        </Section>
-
-        <Section
-          id="pipeline"
-          eyebrow="6 - Pipeline"
-          title="From spreadsheet cell to explained prediction"
-          description="The same code path serves training, the holdout, and every file uploaded in the Classify tab."
-        >
-          <PipelineFlow />
-          <FeatureCatalogPanel />
         </Section>
       </div>
     </div>

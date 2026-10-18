@@ -71,6 +71,8 @@ class Limits:
     max_text_chars: int = 1_000
     header_scan_rows: int = 20
     header_min_matches: int = 4
+    positional_min_readable: float = 0.5  # share of rows with a readable amount or date
+    label_column_min_share: float = 0.5  # share of an extra column that must look like labels
     predict_chunk_rows: int = 20_000
     csv_sniff_bytes: int = 64 * 1024
     csv_sniff_lines: int = 50

@@ -42,8 +42,8 @@ export function CalibrationPanel() {
     <Panel
       title="Does 90% confident mean 90% right?"
       explain={{ chart: "calibration", view: stage === "both" ? "Raw and calibrated" : stage === "before" ? "Raw" : "Calibrated" }}
-      description={<>Across: how sure the model said it was. Up: how often it was actually right. Points on the dashed line are perfectly honest (<Term name="calibration" />).</>}
-      why="Review decisions rely on confidence. If 90% did not mean 90%, sending work to people by confidence would be unreliable."
+      description={<>Across: how sure the model said it was. Up: how often it was actually right. Points on the dashed line are perfectly calibrated (<Term name="calibration" />).</>}
+      why="The review threshold below depends on these confidences being accurate."
       action={
         <Segmented
           label="Calibration stage"
@@ -160,7 +160,6 @@ export function ThresholdPanel() {
       title="Review threshold explorer"
       explain={{ chart: "review-threshold", view: current ? `Threshold ${current.threshold.toFixed(2)} selected` : "" }}
       description={<>Drag the slider to choose the <Term name="review threshold" />: lines below it go to a person. Figures are from cross-validation on 5,309 lines.</>}
-      why="It shows the business trade-off directly: more automation, or higher accuracy on the lines the model decides alone."
       takeaway={
         chosen
           ? `The chosen threshold (${chosen.threshold.toFixed(2)}) is the lowest one at which the automatically decided rows reach the accuracy target. ${pct(1 - chosen.coverage, 0)} of rows go to review, and those rows are only ${pct(chosen.flagged, 0)} accurate, so review effort lands where the model is weak.`
@@ -291,7 +290,6 @@ export function FlagReliabilityPanel() {
       title="How reliable is each warning?"
       explain={{ chart: "warning-reliability", view: source === "oof" ? "Cross-validation" : "Holdout" }}
       description="How accurate the model is on the lines that carry each warning. Warnings marked review send the line to a person."
-      why="It shows that the warnings mean something: flagged lines really are riskier, so reviewing them catches mistakes."
       action={
         <Segmented
           label="Data"
@@ -305,8 +303,8 @@ export function FlagReliabilityPanel() {
       }
       takeaway={
         source === "oof"
-          ? "Rows with no flag are about 98% accurate. New vendors, new GL accounts, and low confidence are where the model errs, so those rows require review. Flags never hide a prediction."
-          : "On the holdout the same warnings mark the weaker rows: low-confidence rows are far less accurate than the holdout as a whole. Severities come from cross-validation, never from the holdout."
+          ? "Lines with no warning are about 98% accurate. New vendors, new GL accounts, and low confidence are where the model errs, so those lines go to review."
+          : "On the holdout the same warnings mark the weaker lines. Which warnings send a line to review was decided from cross-validation, not from the holdout."
       }
     >
       {table.error && <LoadError error={table.error} />}

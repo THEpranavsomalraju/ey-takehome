@@ -118,6 +118,7 @@ Block F: dashboard UI and packaging. Status: IN PROGRESS (backend, holdout, docs
 | CD1 | 2026-10-17 | full PASS 134s | - | - | - | Phases 4 to 7 built; 431 tests; review round next |
 | E1 | 2026-10-17 | full PASS 124s | 2 (edge) | 9 (edge) | - | Edge round 2: index columns, upload types, AmountFlags, explain by row_number, CLI codes, holdout guard by row, thread-safe LightGBM; commit de92b14 |
 | E2 | 2026-10-17 | fast PASS 43s | 1 (code) + 1 (leakage) + 3 (edge) | 11 + 2 + 8 | 12 + 4 + 7 | Cycle 2: guard on model inputs from the features file, fail closed; agent grounding, tool errors, what_if parity; server JSON errors; damaged workbooks; relay hardening; all fixed; commit 98fa943 |
+| G1 | 2026-10-17 | full PASS 130s | - | - | - | Grader pass: business-name headers and safe positional mapping, Tab 1 cleaning panels (missing values, amounts, label cleanup, before/after), Tab 2 table above the fold, chart axis and label fixes, README relay and install notes, plainer UI text |
 
 ## Findings during block C/D
 

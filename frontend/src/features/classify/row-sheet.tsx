@@ -60,7 +60,7 @@ export function RowSheet({
         <SheetHeader className="border-b px-6 py-4">
           <SheetTitle>Row {row}</SheetTitle>
           <SheetDescription>
-            {payload ? `Spreadsheet row ${payload.source_row} of the uploaded file` : "Loading the explanation..."}
+            {payload ? `Line ${payload.source_row} of the uploaded sheet, counting the header row.` : "Loading..."}
           </SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
@@ -149,7 +149,7 @@ function AgentSection({ uploadId, row, autoStart }: { uploadId: string; row: num
         <div>
           <h3 className="text-sm font-medium">Explanation</h3>
           <p className="text-xs text-muted-foreground">
-            A plain-language summary, the exact facts, and what to check. Every number is verified against the model.
+            A plain-language summary, the facts behind it, and what to check.
           </p>
         </div>
         <Button size="sm" onClick={ask} disabled={busy}>

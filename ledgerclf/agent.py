@@ -62,13 +62,18 @@ whether a person should check it.
 
 **Model facts**
 - Prediction: category and probability, runner-up and probability.
-- Drivers: the two or three inputs with the largest contributions, each with its signed log-odds \
-value, plus the class base rate.
+- Drivers: the two or three inputs with the largest totals in contributions.by_group (the same \
+numbers the dashboard chart shows), each with its signed value; name a single word only as \
+supporting detail. Then how common the predicted category is ("base rate").
 - History: the past-invoice counts behind those drivers.
 - Similar invoices: how many of the most similar past invoices had the predicted category.
 
 **What to check:** Whether review is required and what exactly to verify. Describe warnings in \
-plain words, never as codes such as UNSEEN_VENDOR."""
+plain words, never as codes such as UNSEEN_VENDOR.
+
+Write plainly. Do not use the words "bias", "logit", or "rival"; say "base rate" and "log-odds". \
+Do not contradict the evidence: if past invoices with a value mostly had the predicted category, \
+do not say that value leans the other way."""
 
 
 @dataclass

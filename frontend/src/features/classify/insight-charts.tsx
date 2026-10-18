@@ -22,7 +22,6 @@ export function PredictedClassesChart({
       title="Predicted categories"
       explain={{ chart: "upload-categories", uploadId }}
       description="How many lines in this file went to each category. Click a bar to show only those lines in the table."
-      why="A quick check that the mix looks sensible for the ledger you uploaded."
     >
       <ChartContainer config={{ rows: { label: "Rows" } }} className="h-[200px] w-full">
         <BarChart data={data} layout="vertical" margin={{ left: 4, right: 56 }}>
@@ -76,7 +75,6 @@ export function ConfidenceChart({ uploadId, insights }: { uploadId: string; insi
       title="How confident the model is"
       explain={{ chart: "upload-confidence", uploadId }}
       description={`How sure the model is across this file: lines per confidence level, automatic and review side by side (square-root scale, dashed line = ${pct(insights.threshold, 0)} threshold).`}
-      why="It shows how much of the file can be trusted automatically and how much needs a person."
     >
       <ChartContainer
         config={{
@@ -141,16 +139,15 @@ export function FlagsChart({
       title="Warnings raised"
       explain={{ chart: "upload-warnings", uploadId }}
       description="Which warnings fired in this file and how often. Click a bar to show only those lines."
-      why="It points reviewers to the lines with new vendors, new accounts, or low confidence first."
     >
       {data.length === 0 ? (
         <p className="py-10 text-center text-sm text-muted-foreground">No warnings: every input looked familiar.</p>
       ) : (
-        <ChartContainer config={{ rows: { label: "Rows" } }} className="h-[200px] w-full">
+        <ChartContainer config={{ rows: { label: "Rows" } }} className="w-full" style={{ height: Math.max(200, data.length * 30) }}>
           <BarChart data={data} layout="vertical" margin={{ left: 4, right: 48 }}>
             <CartesianGrid horizontal={false} stroke="var(--grid)" />
             <XAxis type="number" hide />
-            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={140} />
+            <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={150} interval={0} />
             <ChartTooltip cursor={{ fill: "var(--muted)", opacity: 0.4 }} content={<ChartTooltipContent hideIndicator />} />
             <Bar isAnimationActive={false}
               dataKey="rows"

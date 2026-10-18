@@ -21,7 +21,7 @@ export function ClassDistributionPanel() {
       title="Category balance"
       explain={{ chart: "category-balance", view: `${scale} scale` }}
       description="How many past invoice lines carry each category (training rows only)."
-      why={<>It shows how lopsided the data is. A lazy model that always answers Category_1 would already look 88% accurate while never finding a rare category, so models are also judged on <Term name="macro F1" />.</>}
+      why={<>A model that always answers Category_1 already scores 88%, so models are also judged on <Term name="macro F1" />, which counts every category equally.</>}
       action={
         <Segmented
           label="Axis scale"
@@ -33,7 +33,7 @@ export function ClassDistributionPanel() {
           ]}
         />
       }
-      takeaway="88.4% of rows are Category_1, so a model that always answers Category_1 is already 88.4% accurate. Results are therefore also reported as macro F1, which weighs the five categories with 11 or more rows equally."
+      takeaway="88.4% of lines are Category_1, so always answering Category_1 scores 88.4%."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -105,7 +105,7 @@ export function MonthlyVolumePanel() {
       title="When each category occurs"
       explain={{ chart: "monthly-volume", view: view === "rare" ? "Rare categories only" : "All categories" }}
       description={view === "rare" ? "Invoice lines per posting month for the four rare categories (months without one are left out)." : "Invoice lines per posting month, coloured by category."}
-      why={<>If a category depends on timing, the posting month is a useful input, and the model must also be tested on later months (the <Term name="out-of-time" />).</>}
+      why={<>Timing matters for the rare categories, so the posting month is an input and the model is also tested on later months (the <Term name="out-of-time" />).</>}
       action={
         <Segmented
           label="Categories shown"
@@ -117,7 +117,7 @@ export function MonthlyVolumePanel() {
           ]}
         />
       }
-      takeaway="The rare categories cluster in particular months: Category_3 from 2018-05, Category_4 spread through the year with a peak in 2018-07, both Category_5 rows in 2018-10. That is why the posting month is a model input and why an out-of-time test is part of validation."
+      takeaway="Category_3 starts in 2018-05, Category_4 peaks in 2018-07, and both Category_5 lines are from 2018-10."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -190,7 +190,6 @@ export function SignalPanel() {
           <>How much each input tells us about the category, as <Term name="mutual information" /> (higher = more).</>
         )
       }
-      why="It shows which columns the model should lean on, and which add little on their own."
       action={
         <Segmented
           label="Association measure"
@@ -202,7 +201,7 @@ export function SignalPanel() {
           ]}
         />
       }
-      takeaway="Vendor, GL account, and their combination are strongly tied to the category; the description carries the most information overall. Amount and month are weak on their own but separate the rare categories."
+      takeaway="Vendor, GL account, and the pair are strongly tied to the category; the description carries the most information. Amount and month are weak alone but help separate the rare categories."
     >
       {(info.error || cramer.error) && <LoadError error={(info.error ?? cramer.error) as Error} />}
       {loading ? (
@@ -211,7 +210,13 @@ export function SignalPanel() {
         <ChartContainer config={{ value: { label: measure === "cramer" ? "Cramer's V" : "Nats", color: "var(--chart-1)" } }} className="h-[220px] w-full">
           <BarChart data={rows} layout="vertical" margin={{ left: 4, right: 48 }}>
             <CartesianGrid horizontal={false} stroke="var(--grid)" />
-            <XAxis type="number" domain={[0, measure === "cramer" ? 1 : "auto"]} tickLine={false} axisLine={false} />
+            <XAxis
+              type="number"
+              domain={[0, measure === "cramer" ? 1 : 0.4]}
+              ticks={measure === "cramer" ? [0, 0.25, 0.5, 0.75, 1] : [0, 0.1, 0.2, 0.3, 0.4]}
+              tickLine={false}
+              axisLine={false}
+            />
             <YAxis type="category" dataKey="name" tickLine={false} axisLine={false} width={124} />
             <ChartTooltip cursor={{ fill: "var(--muted)", opacity: 0.4 }} content={<ChartTooltipContent hideIndicator />} />
             <Bar isAnimationActive={false} dataKey="value" fill="var(--color-value)" radius={[0, 4, 4, 0]} barSize={16}>

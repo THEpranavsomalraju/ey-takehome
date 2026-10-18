@@ -37,7 +37,12 @@ export function Panel({
     <Card className={cn("gap-4", className)}>
       <CardHeader>
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        {description && <CardDescription className="text-xs">{description}</CardDescription>}
+        {(description || why) && (
+          <CardDescription className="space-y-1 text-xs">
+            {description && <p>{description}</p>}
+            {why && <p>{why}</p>}
+          </CardDescription>
+        )}
         {(action || explain) && (
           <CardAction className="flex flex-wrap items-center justify-end gap-2">
             {action}
@@ -46,8 +51,8 @@ export function Panel({
                 target={explain}
                 fallback={
                   <>
-                    {why && <p><span className="font-medium">Why it matters: </span>{why}</p>}
-                    {takeaway && <p><span className="font-medium">Finding: </span>{takeaway}</p>}
+                    {description && <p className="text-muted-foreground">{description}</p>}
+                    {takeaway && <p>{takeaway}</p>}
                   </>
                 }
               />
@@ -57,21 +62,8 @@ export function Panel({
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {children}
-        {(why || takeaway) && (
-          <div className="mt-auto space-y-1.5 border-t pt-3 text-xs leading-relaxed text-muted-foreground">
-            {why && (
-              <p>
-                <span className="font-medium text-foreground">Why it matters: </span>
-                {why}
-              </p>
-            )}
-            {takeaway && (
-              <p>
-                <span className="font-medium text-foreground">Finding: </span>
-                {takeaway}
-              </p>
-            )}
-          </div>
+        {takeaway && (
+          <p className="mt-auto border-t pt-3 text-xs leading-relaxed text-foreground/75">{takeaway}</p>
         )}
       </CardContent>
     </Card>

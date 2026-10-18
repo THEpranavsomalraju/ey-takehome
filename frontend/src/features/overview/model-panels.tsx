@@ -6,7 +6,7 @@ import { ChartSkeleton, LoadError, Panel, Segmented, SeriesLegend } from "@/comp
 import { DotPlot } from "@/components/dot-plot"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
-import { CLASSES, pct, signed } from "@/lib/domain"
+import { CLASSES, niceTicks, pct, signed } from "@/lib/domain"
 import { asNumber, useFinalModel, useTable } from "@/lib/reports"
 
 const MODEL_LABELS: Record<string, string> = {
@@ -49,12 +49,18 @@ export function ValidationPanel() {
         })),
     [data, model],
   )
+  const score = (prefix: string) => items.find((i) => i.key.startsWith(prefix))?.value
+  const random = score("random"), grouped = score("grouped"), unseen = score("unseen")
+  const schemeFinding =
+    random != null && grouped != null && unseen != null
+      ? `For this model a random split reports ${pct(random)}, ${((random - grouped) * 100).toFixed(1)} points above grouped testing (${pct(grouped)}). On vendors never seen in training it scores ${pct(unseen)}, which is why new vendors are flagged for review.`
+      : undefined
   return (
     <Panel
       title="How the score depends on the test design"
       explain={{ chart: "test-design", view: `Model: ${modelLabel(model)}` }}
       description="The same model's accuracy under four different ways of testing it."
-      why={<>A score is only as honest as the test behind it. This shows how much a careless random test would flatter the model, and how it holds up on new vendors and later months. The one we report is <Term name="grouped cross-validation" />.</>}
+      why={<>A random split puts copies of test lines into training. The figure reported everywhere else is <Term name="grouped cross-validation" />, computed here for three representative models.</>}
       action={
         <Select value={model} onValueChange={setModel}>
           <SelectTrigger size="sm" className="w-48 text-xs" aria-label="Model">
@@ -69,7 +75,7 @@ export function ValidationPanel() {
           </SelectContent>
         </Select>
       }
-      takeaway="A random split puts exact copies of test rows into training and inflates accuracy by about 1.4 points. Every score in this dashboard uses grouped folds instead. New vendors are the hardest case, which is why they are flagged for review."
+      takeaway={schemeFinding}
     >
       {error && <LoadError error={error} />}
       {!data ? <ChartSkeleton height={160} /> : <DotPlot items={items} domain={[0.86, 0.98]} format={(v) => pct(v)} tickFormat={(v) => pct(v, 0)} ticks={[0.86, 0.88, 0.9, 0.92, 0.94, 0.96, 0.98]} />}
@@ -114,7 +120,6 @@ export function LeaderboardPanel() {
       title="Model comparison"
       explain={{ chart: "model-comparison", view: metric === "recall" ? `Recall for ${rareClass}` : metric === "accuracy" ? "Accuracy" : "Macro F1" }}
       description={<>Each candidate model's score on identical tests. The dot is the average; the line shows how much it varies between test runs. Switch between <Term name="accuracy" />, <Term name="macro F1" />, and <Term name="recall" /> for one category.</>}
-      why={<>It shows that the chosen model (highlighted) wins fairly against simple rules and other approaches, not just against the <Term name="baseline" />.</>}
       action={
         <div className="flex flex-wrap items-center gap-2">
           <Segmented
@@ -143,7 +148,7 @@ export function LeaderboardPanel() {
           )}
         </div>
       }
-      takeaway="The log-odds blend of logistic regression and LightGBM (highlighted) leads on accuracy and macro F1. The two members make different mistakes, so combining their scores beats either one alone."
+      takeaway="The log-odds blend (highlighted) leads on accuracy and macro F1. Logistic regression and LightGBM make different mistakes, so the blend beats both."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -195,7 +200,6 @@ export function AblationPanel() {
       title="What each input is worth"
       explain={{ chart: "ablation", view: metric === "delta_accuracy" ? "Change in accuracy" : "Change in macro F1" }}
       description={<>How much the score changes when one group of inputs is taken away (or added). This is an <Term name="ablation" />, run with the logistic model.</>}
-      why="It tells us which information the model really relies on, so useful inputs are kept and noise is left out."
       action={
         <Segmented
           label="Metric"
@@ -207,7 +211,7 @@ export function AblationPanel() {
           ]}
         />
       }
-      takeaway="Removing the description words or the posting month hurts most, especially for the rare categories. Small gains from removing other groups did not carry over to the final blend, so the full feature set is kept."
+      takeaway="Dropping the description words or the posting month hurts most, mainly for the rare categories."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -275,12 +279,15 @@ export function ClassWeightPanel() {
     return [...byPower.values()].sort((a, b) => a.power - b.power)
   }, [data, metric])
   const percent = metric !== "oot_majority_rows_predicted_rare"
+  const yTicks = useMemo(() => {
+    const values = rows.flatMap((r) => Object.entries(r).filter(([k]) => k !== "power").map(([, v]) => v))
+    return values.length ? niceTicks(Math.min(...values), Math.max(...values)) : undefined
+  }, [rows])
   return (
     <Panel
       title="Class weights: rare-category recall against false alarms"
       explain={{ chart: "class-weights", view: metric === "cv_macro_f1_5" ? "Macro F1" : metric === "cv_accuracy" ? "Accuracy" : "False rare alarms" }}
       description={<>Scores as the model is told to pay more attention to rare categories (<Term name="class weights" />): 0 = no extra attention, 1 = every category weighted equally.</>}
-      why="It shows the trade-off that was tuned: finding rare categories without raising false alarms on ordinary invoices."
       action={
         <Segmented
           label="Metric"
@@ -293,7 +300,7 @@ export function ClassWeightPanel() {
           ]}
         />
       }
-      takeaway="A small power (0.25, dashed line) gets most of the rare-category gain without extra false rare alarms on common invoices. Higher powers trade accuracy for alarms."
+      takeaway="Power 0.25 (dashed line) gets most of the rare-category gain without extra false alarms."
     >
       {error && <LoadError error={error} />}
       {!data ? (
@@ -312,8 +319,9 @@ export function ClassWeightPanel() {
             <YAxis
               tickLine={false}
               axisLine={false}
-              domain={["auto", "auto"]}
-              tickFormatter={(v) => (percent ? pct(v, 0) : String(v))}
+              domain={yTicks ? [yTicks[0], yTicks[yTicks.length - 1]] : ["auto", "auto"]}
+              ticks={yTicks}
+              tickFormatter={(v) => (percent ? pct(v, yTicks && yTicks[1] - yTicks[0] < 0.01 ? 1 : 0) : String(v))}
               allowDecimals={!percent ? false : true}
             />
             <ReferenceLine x={0.25} stroke="var(--muted-foreground)" strokeDasharray="4 4" />

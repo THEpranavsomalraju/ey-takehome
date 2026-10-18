@@ -310,14 +310,14 @@ def _flags(result: PredictionResult, position: int) -> list[dict[str, str]]:
 
 def _context(reference: ReferenceStats, row: Any) -> dict[str, Any]:
     total = reference.training_rows
-    amount = (
-        float(row.iloc[0][AMOUNT]) if not np.isnan(row.iloc[0][AMOUNT]) else reference.amount_median
-    )
+    amount = row.iloc[0][AMOUNT]
+    # A missing amount was filled with the median; its percentile would mean nothing.
+    percentile = None if np.isnan(amount) else reference.amount_percentile(float(amount))
     return {
         "training_rows": total,
         "class_prior": {c: reference.class_counts[c] / total for c in CANONICAL_CLASSES},
         "period_range": [period_label(reference.period_min), period_label(reference.period_max)],
-        "amount_percentile": reference.amount_percentile(amount),
+        "amount_percentile": percentile,
     }
 
 

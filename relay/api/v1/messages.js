@@ -20,7 +20,7 @@ const ALLOWED_TOOLS = new Set([
 ]);
 // sha256 of ledgerclf.agent.SYSTEM_PROMPT and ledgerclf.chart_explainer.CHART_SYSTEM_PROMPT;
 // tests/integration/test_agent_and_server.py keeps both in sync.
-const SYSTEM_PROMPT_SHA256 = "b3f27101d827a60f8c5604222bf2780230e7e6a309e4b4fb7527bb8636ccac11";
+const SYSTEM_PROMPT_SHA256 = "bf919548b2d9e5eed6f20eb0796ba988f40633ee1fef2305eda6ac8139797503";
 const CHART_PROMPT_SHA256 = "23dd3251eb8c266f37ffaf04a3b48fcd9d30408c49581f6e0de951b9ea4d4d42";
 const ALLOWED_EFFORT = "low";
 const RATE_LIMIT_PER_MINUTE = 40;

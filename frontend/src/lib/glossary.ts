@@ -52,7 +52,7 @@ export const GLOSSARY = {
   calibration: {
     term: "Calibration",
     definition:
-      "Adjusting the model's confidence so it is honest: one number (the temperature) rescales every score so that stated confidence matches observed accuracy.",
+      "Adjusting the model's confidence so it means what it says: one number (the temperature) rescales every score so that stated confidence matches observed accuracy.",
   },
   "review threshold": {
     term: "Review threshold",

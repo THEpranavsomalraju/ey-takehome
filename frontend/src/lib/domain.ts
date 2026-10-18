@@ -73,3 +73,16 @@ export const MODEL_NAMES: Record<string, string> = {
 }
 
 export const modelName = (name: string) => MODEL_NAMES[name] ?? name
+
+/** Round-number axis ticks (steps of 1, 2, 2.5, or 5 times a power of ten) covering min..max. */
+export function niceTicks(min: number, max: number, count = 5): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return [min]
+  const raw = (max - min) / (count - 1)
+  const magnitude = 10 ** Math.floor(Math.log10(raw))
+  const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= raw) ?? raw
+  const low = Math.floor(min / step) * step
+  const ticks: number[] = []
+  for (let t = low; t <= max + step * 1e-9; t += step) ticks.push(Number(t.toFixed(10)))
+  if (ticks[ticks.length - 1] < max) ticks.push(Number((ticks[ticks.length - 1] + step).toFixed(10)))
+  return ticks
+}

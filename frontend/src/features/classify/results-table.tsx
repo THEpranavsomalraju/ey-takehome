@@ -146,7 +146,7 @@ export function ResultsTable({
       </div>
 
       {error && <p className="p-4 text-sm text-destructive">{error}</p>}
-      <ScrollArea className="h-[min(70vh,44rem)]">
+      <ScrollArea className="h-[max(26rem,calc(100dvh-14rem))]">
         <Table className="text-xs">
           <TableHeader className="sticky top-0 z-10 bg-card">
             <TableRow>
@@ -233,7 +233,7 @@ function ResultRow({
       onClick={() => onSelect(row.row_number)}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onSelect(row.row_number))}
       data-state={selected ? "selected" : undefined}
-      className="cursor-pointer focus-visible:bg-muted/60 focus-visible:outline-none"
+      className="cursor-pointer focus-visible:bg-muted/60 focus-visible:outline-none [&>td]:py-1"
     >
       <TableCell className="tabular text-right text-muted-foreground">{row.row_number}</TableCell>
       <TableCell className="max-w-44 truncate" title={row.Col1 ?? ""}>{row.Col1 ?? "-"}</TableCell>
@@ -299,7 +299,7 @@ function ResultRow({
         <Button
           size="sm"
           variant="outline"
-          className="h-7 gap-1 px-2 text-xs"
+          className="h-6 gap-1 px-2 text-xs"
           aria-label={`Explain row ${row.row_number}`}
           onClick={(e) => {
             e.stopPropagation()

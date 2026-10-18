@@ -14,7 +14,7 @@ A model that suggests the category of each accounts payable invoice line, with a
 Python 3.11 to 3.14. On macOS, run `brew install libomp` first so LightGBM can load (without it the app still runs, on a logistic-regression fallback).
 
 ```
-python -m venv .venv
+python3 -m venv .venv                  # Windows: py -m venv .venv
 source .venv/bin/activate              # Windows: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 python -m pip install -e . --no-deps
@@ -25,7 +25,7 @@ Nothing needs training or building: the trained models, reports, and built dashb
 
 ## What to look at
 
-1. **Data & Model tab.** The story from raw data to final model: exploration, preprocessing, honest testing, model choice, calibration, and the holdout result. Every chart says what it shows and why it matters, and has an **Explain** button for an AI explanation.
+1. **Data & Model tab.** From raw data to final model: exploration, cleaning and features, the split and testing, model choice, calibration, and the holdout result. Each chart has an **Explain** button that asks the AI about it.
 2. **Classify & Explain tab.** Upload `data/holdout/holdout_features.xlsx` (or click *Use the holdout sample*). Every line gets a category, a confidence, and a review decision. Click **Explain** on any row for the AI agent's explanation, the inputs that drove the prediction, and supporting evidence from past invoices.
 3. **Notebooks** (`notebooks/01_eda`, `02_preprocessing`, `03_modeling`), each readable on its own.
 4. **`MODEL_CARD.md`**: results, design choices, and limitations on one page.
@@ -34,7 +34,7 @@ New to the terms? Open **Guide** in the dashboard header, or hover any dotted wo
 
 ## How it works
 
-- **Validation.** Any Excel or CSV layout is read: header detection, renamed or reordered columns, encodings, currency strings, European numbers, mixed date formats. Problems become warnings; every non-empty line gets a prediction.
+- **Validation.** Excel or CSV, with the original `Col1`..`Col7` headers, business names (Vendor, Amount, Posting date, GL account, ...), or no header at all. It also handles reordered columns, other encodings, currency strings, European numbers, and mixed date formats. Problems become warnings; every non-empty line gets a prediction.
 - **Features.** Words per text column (TF-IDF), recurring vendors, accounts and vendor-account pairs, the amount (signed log plus credit and round flags), and the posting month. Col2, the invoice number, is an identifier and is not used.
 - **Model.** A log-odds blend of logistic regression and LightGBM, calibrated so stated confidence matches observed accuracy. Each prediction splits exactly into per-input contributions.
 - **Testing.** 10% held out before any analysis. All development used grouped cross-validation, because a quarter of the rows are exact copies of other rows and a random split would test the model on rows it had already seen.
@@ -45,8 +45,8 @@ New to the terms? Open **Guide** in the dashboard header, or hover any dotted wo
 The agent runs only when asked. It explains a row from the model's exact figures and the training history, and every number it quotes is checked against them. It uses Claude (`claude-haiku-5-5`) through the first route that works:
 
 1. **Your own key** (optional): typed into the dashboard settings, or `ANTHROPIC_API_KEY` in the environment or a `.env` file.
-2. **The project relay** (no setup): a small hosted function (`relay/`) that holds the project's key and forwards only this app's explanation requests.
-3. **Offline**: if Claude is unreachable, a structured explanation built from the same figures, clearly labeled.
+2. **The project relay** (no setup): a small hosted function (`relay/`) that holds the project's key and forwards only this app's explanation requests. It exists so graders don't need their own key. It only accepts this app's two prompts and has a rate limit and a spend cap.
+3. **Offline**: if Claude is unreachable (no internet, relay down, key revoked), the app writes a plain explanation from the same figures and labels it as offline. Nothing else in the app depends on the relay.
 
 ## Command line
 
@@ -68,7 +68,7 @@ python -m ledgerclf train
 python tools/compare_golden.py --tolerance same-machine
 ```
 
-Tests: `python -m pip install -r requirements-dev.txt`, then `python -m pytest` (555 tests, including 79 catalogued edge cases and 75 hostile-input tests). Re-run the notebooks with `python tools/run_notebooks.py`.
+Tests: `python -m pip install -r requirements-dev.txt`, then `python -m pytest`. Most of the suite covers messy input files: odd headers, encodings, broken cells, and files built to break the reader. Re-run the notebooks with `python tools/run_notebooks.py`.
 
 ## Project layout
 

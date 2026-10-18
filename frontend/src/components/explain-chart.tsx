@@ -48,7 +48,7 @@ export function ExplainChart({ target, fallback }: { target: ExplainTarget; fall
           Explain
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(30rem,calc(100vw-2rem))] space-y-3">
+      <PopoverContent align="end" collisionPadding={{ top: 72, bottom: 16 }} className="w-[min(30rem,calc(100vw-2rem))] space-y-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium">About this chart</p>
           {answer && (
@@ -77,7 +77,7 @@ export function ExplainChart({ target, fallback }: { target: ExplainTarget; fall
         )}
         {answer?.text && (
           <p className="text-[11px] text-muted-foreground">
-            Written by Claude from this chart's data; every number was checked against it.
+            Written by Claude from this chart's data.
           </p>
         )}
       </PopoverContent>

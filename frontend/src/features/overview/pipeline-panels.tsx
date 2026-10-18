@@ -105,7 +105,6 @@ export function FeatureCatalogPanel() {
       title="Feature pipeline"
       explain={{ chart: "feature-pipeline" }}
       description={<>Every group of inputs the model computes from a spreadsheet row, and how many numbers each produces ({num(total)} with single words; the final model adds word pairs). Text uses <Term name="TF-IDF" />.</>}
-      why="It documents exactly what the model sees, and that the same steps run for training and for every uploaded file."
     >
       {(catalog.error || space.error) && <LoadError error={(catalog.error ?? space.error) as Error} />}
       {loading ? (

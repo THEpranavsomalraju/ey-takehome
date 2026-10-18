@@ -18,6 +18,7 @@ import pandas as pd
 
 from ledgerclf.config import Limits
 from ledgerclf.exceptions import SchemaError
+from ledgerclf.labels import normalize_label
 from ledgerclf.values import (
     clean_text,
     date_order_evidence,
@@ -70,10 +71,33 @@ TEXT_TRUNCATED = "text_truncated"
 
 KNOWN_DOC_TYPES: dict[str, str] = {"nodoc": "NoDoc", "doc1": "Doc1", "doc2": "Doc2", "doc3": "Doc3"}
 
+# Common business names for each column, in normalized form (lowercase, no separators).
+_BUSINESS_NAMES: dict[str, tuple[str, ...]] = {
+    COL_VENDOR: ("vendor", "vendorname", "supplier", "suppliername", "payee"),
+    COL_INVOICE: (
+        "invoice",
+        "invoiceno",
+        "invoicenumber",
+        "invoicenum",
+        "invoiceid",
+        "invno",
+        "invoice#",
+        "inv#",
+    ),
+    COL_AMOUNT: ("amount", "amt", "invoiceamount", "lineamount", "netamount", "value"),
+    COL_DESCRIPTION: ("description", "desc", "linedescription", "itemdescription", "memo"),
+    COL_PERIOD: ("date", "postingdate", "postdate", "period", "postingperiod", "invoicedate"),
+    COL_ACCOUNT: ("glaccount", "gl", "glcode", "account", "accountname", "ledgeraccount"),
+    COL_DOC_TYPE: ("doctype", "documenttype", "docflag", "documentflag", "doc", "document"),
+}
 _HEADER_ALIASES: dict[str, str] = {
     **{f"col{i}": name for i, name in enumerate(INPUT_COLUMNS, start=1)},
     **dict(zip("abcdefg", INPUT_COLUMNS, strict=True)),
-    **{alias: LABEL_COLUMN for alias in ("classificationlabel", "label", "class", "target", "h")},
+    **{alias: column for column, aliases in _BUSINESS_NAMES.items() for alias in aliases},
+    **{
+        alias: LABEL_COLUMN
+        for alias in ("classificationlabel", "label", "class", "category", "target", "h")
+    },
 }
 _HEADER_STRIP = re.compile(r"[\s_\-.]+")
 _INDEX_ARTIFACT = re.compile(r"^(unnamed:?\d*|index|)$")
@@ -366,37 +390,78 @@ def _resolve_by_position(
             "(or A to G), or upload a file with exactly 7 input columns in that order.",
             code="MISSING_REQUIRED_COLUMNS",
         )
-    names = [*INPUT_COLUMNS, LABEL_COLUMN][:width]
-    chosen = {name: position for position, name in enumerate(names)}
-    issues = [
-        make_issue(
-            Severity.WARNING,
-            "POSITIONAL_MAPPING",
-            f"No header row found. Columns were mapped by position: first {len(INPUT_COLUMNS)} "
-            "to Col1 to Col7"
-            + (", the last to the label" if width > len(INPUT_COLUMNS) else "")
-            + ".",
-        )
-    ]
-    if _first_row_looks_like_header(raw, chosen):
-        header_row = int(raw.index[0]) + 1
-        names_found = ", ".join(
-            str(clean_text(v, limits.message_value_chars)[0]) for v in raw.iloc[0]
-        )
-        issues.append(
-            make_issue(
-                Severity.WARNING,
-                "HEADER_NOT_RECOGNIZED",
-                f"Row {header_row} looks like a header ({names_found}) but its names do not "
-                "match Col1 to Col7, so it was skipped. Rename the headers to Col1 to Col7 "
-                "(or A to G) to map columns by name instead of position.",
-                rows=[header_row],
-            )
-        )
+    header_like = _first_row_looks_like_header(raw, _positions(len(INPUT_COLUMNS)))
+    first_row = ", ".join(str(clean_text(v, limits.message_value_chars)[0]) for v in raw.iloc[0])
+    header_row = int(raw.index[0]) + 1
+    if header_like:
         raw = raw.iloc[1:]
+    with_label = width > len(INPUT_COLUMNS) and _looks_like_labels(raw.iloc[:, -1], limits)
+    chosen = _positions(len(INPUT_COLUMNS) + int(with_label))
+    _require_readable_positions(raw, chosen, first_row, limits)
+    issues = [_positional_issue(header_row if header_like else None, first_row, width, with_label)]
     frame = _assemble(raw, chosen)
     mapping = {f"position {p + 1}": n for n, p in chosen.items()}
     return frame, mapping, issues
+
+
+def _positions(count: int) -> dict[str, int]:
+    """Columns in their documented order: Col1 to Col7, then the label."""
+    return {name: position for position, name in enumerate([*INPUT_COLUMNS, LABEL_COLUMN][:count])}
+
+
+def _looks_like_labels(values: pd.Series, limits: Limits) -> bool:
+    """True when most filled cells of an extra column are category labels."""
+    filled = [v for v in values if not is_blank_cell(v)]
+    if not filled:
+        return False
+    labels = sum(normalize_label(v) is not None for v in filled)
+    return labels / len(filled) >= limits.label_column_min_share
+
+
+def _require_readable_positions(
+    raw: pd.DataFrame, chosen: dict[str, int], first_row: str, limits: Limits
+) -> None:
+    """Refuse a positional mapping that would put the wrong data in the amount and date.
+
+    Raises:
+        SchemaError: When most rows have neither a readable amount nor a readable date.
+    """
+    amount_at, period_at = chosen[COL_AMOUNT], chosen[COL_PERIOD]
+    readable = raw.apply(
+        lambda row: (
+            parse_amount(row.iloc[amount_at]) is not None
+            or parse_date(row.iloc[period_at], day_first=False) is not None
+        ),
+        axis=1,
+    )
+    if len(raw) and readable.mean() < limits.positional_min_readable:
+        raise SchemaError(
+            "The column names were not recognized, and in the order given the 3rd column does "
+            "not hold amounts and the 5th does not hold dates, so the columns cannot be matched "
+            f"(first row: {first_row}). Name the columns Col1 to Col7 (or vendor, invoice "
+            "number, amount, description, posting date, GL account, document flag).",
+            code="MISSING_REQUIRED_COLUMNS",
+        )
+
+
+def _positional_issue(
+    header_row: int | None, first_row: str, width: int, with_label: bool
+) -> ValidationIssue:
+    order = "Col1 to Col7 in order" + (", then the label" if with_label else "")
+    extra = (
+        " The extra last column did not hold category labels and was ignored."
+        if (width > len(INPUT_COLUMNS) and not with_label)
+        else ""
+    )
+    if header_row is None:
+        message = f"No header row found, so columns were read by position ({order}).{extra}"
+        return make_issue(Severity.WARNING, "POSITIONAL_MAPPING", message)
+    message = (
+        f"Row {header_row} looks like a header ({first_row}), but its names were not "
+        f"recognized, so it was skipped and the columns were read by position ({order}).{extra} "
+        "Name the columns Col1 to Col7 to map them by name instead."
+    )
+    return make_issue(Severity.WARNING, "HEADER_NOT_RECOGNIZED", message, rows=[header_row])
 
 
 def _first_row_looks_like_header(raw: pd.DataFrame, chosen: dict[str, int]) -> bool:

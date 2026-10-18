@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react"
 import { toast } from "sonner"
 
-import { Stat } from "@/components/blocks"
+import { Card, CardContent } from "@/components/ui/card"
 import { api, type RowQuery, type Upload } from "@/lib/api"
 import { num, pct } from "@/lib/domain"
 import { ConfidenceChart, FlagsChart, PredictedClassesChart } from "./insight-charts"
@@ -28,7 +28,6 @@ export function ClassifyTab() {
         setQuery(EMPTY_QUERY)
         setSelected(null)
         setDrawerOpen(false)
-        toast.success(`${num(next.summary.rows)} rows classified in ${num(next.summary.timings_ms.total)} ms`)
       })
       .catch((e: Error) => toast.error(e.message, { duration: 10000 }))
       .finally(() => setBusy(false))
@@ -50,9 +49,9 @@ export function ClassifyTab() {
         <UploadPanel busy={busy} onFile={onFile} onSample={onSample} />
         <ol className="grid gap-3 sm:grid-cols-3">
           {[
-            ["Upload", "Any ledger file with the columns Col1 to Col7, or the holdout sample. It is checked and every line is classified in well under a second."],
+            ["Upload", "An Excel or CSV ledger with the seven input columns (Col1 to Col7 or business names like Vendor and Amount), or the holdout sample."],
             ["Review", "See how many lines were decided automatically and which need a person. Filter by category, warning, or confidence."],
-            ["Explain", "Click a line to see what drove its category, which past invoices support it, and a plain-language explanation from the AI agent."],
+            ["Explain", "Click Explain on a line to see what drove its category, which past invoices support it, and a short explanation from the AI."],
           ].map(([title, text], i) => (
             <li key={title} className="space-y-1 rounded-lg border p-3">
               <p className="text-sm font-medium">
@@ -70,45 +69,30 @@ export function ClassifyTab() {
   const { summary, insights } = upload
   const reviewShare = summary.rows ? summary.review_required / summary.rows : 0
   return (
-    <div className="space-y-6">
-      <div className="space-y-3">
-        <FileBar upload={upload} />
+    <div className="space-y-4">
+      <FileBar upload={upload}>
         <UploadPanel busy={busy} onFile={onFile} onSample={onSample} compact />
-      </div>
+      </FileBar>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Rows classified" value={num(summary.rows)} detail={`${num(summary.report.rows_read)} rows read`} />
-        <Stat
-          label="Decided automatically"
-          value={num(summary.rows - summary.review_required)}
-          detail={`${pct(1 - reviewShare)} of rows`}
-        />
-        <Stat
-          label="Need a person's review"
-          value={num(summary.review_required)}
-          detail={`${pct(reviewShare)} of rows`}
-          hint="Confidence below the threshold, or a warning such as a new vendor or GL account."
-        />
-        <Stat
-          label="Average confidence"
-          value={pct(insights.mean_confidence)}
-          detail={`Review threshold ${pct(insights.threshold, 0)}`}
-        />
-      </div>
+      <Card className="py-0">
+        <CardContent className="grid grid-cols-2 divide-border px-0 lg:grid-cols-4 lg:divide-x">
+          {[
+            ["Lines classified", num(summary.rows), `${num(summary.timings_ms.total)} ms`],
+            ["Decided automatically", num(summary.rows - summary.review_required), pct(1 - reviewShare)],
+            ["Need a person's review", num(summary.review_required), pct(reviewShare)],
+            ["Average confidence", pct(insights.mean_confidence), `threshold ${pct(insights.threshold, 0)}`],
+          ].map(([label, value, detail]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3 px-4 py-3">
+              <span className="text-xs text-muted-foreground">{label}</span>
+              <span className="tabular text-lg font-semibold">
+                {value} <span className="text-xs font-normal text-muted-foreground">{detail}</span>
+              </span>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <IssuesList issues={summary.report.issues} fallbackReason={summary.fallback_reason} />
-      <LabeledMetrics upload={upload} />
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        <PredictedClassesChart
-          uploadId={upload.upload_id}
-          insights={insights}
-          selected={query.label}
-          onSelect={(label) => setQuery({ ...query, label })}
-        />
-        <ConfidenceChart uploadId={upload.upload_id} insights={insights} />
-        <FlagsChart uploadId={upload.upload_id} insights={insights} selected={query.flag} onSelect={(flag) => setQuery({ ...query, flag })} />
-      </div>
 
       <ResultsTable
         key={upload.upload_id}
@@ -129,6 +113,21 @@ export function ClassifyTab() {
           setDrawerOpen(true)
         }}
       />
+
+      <div className="space-y-4 pt-4">
+        <h2 className="text-base font-semibold tracking-tight">Summary of this file</h2>
+        <LabeledMetrics upload={upload} />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <PredictedClassesChart
+            uploadId={upload.upload_id}
+            insights={insights}
+            selected={query.label}
+            onSelect={(label) => setQuery({ ...query, label })}
+          />
+          <ConfidenceChart uploadId={upload.upload_id} insights={insights} />
+          <FlagsChart uploadId={upload.upload_id} insights={insights} selected={query.flag} onSelect={(flag) => setQuery({ ...query, flag })} />
+        </div>
+      </div>
 
       <RowSheet
         uploadId={upload.upload_id}

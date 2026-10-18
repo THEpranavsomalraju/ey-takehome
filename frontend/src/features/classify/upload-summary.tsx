@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { AlertTriangleIcon, ChevronDownIcon, CircleCheckIcon, DownloadIcon, InfoIcon, OctagonXIcon } from "lucide-react"
 
 import { ClassLabel, Stat } from "@/components/blocks"
@@ -16,7 +16,7 @@ const SEVERITY = {
   INFO: { icon: InfoIcon, className: "text-muted-foreground", label: "Note" },
 } as const
 
-export function FileBar({ upload }: { upload: Upload }) {
+export function FileBar({ upload, children }: { upload: Upload; children?: ReactNode }) {
   const { summary, upload_id } = upload
   const info = summary.read_info
   const details = [
@@ -33,6 +33,7 @@ export function FileBar({ upload }: { upload: Upload }) {
         <p className="text-xs text-muted-foreground">{details.join(" - ")}</p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        {children}
         <Badge variant="outline" className="hidden font-normal sm:inline-flex">
           {modelName(summary.model_used)}
         </Badge>
@@ -48,9 +49,9 @@ export function FileBar({ upload }: { upload: Upload }) {
 }
 
 export function IssuesList({ issues, fallbackReason }: { issues: Issue[]; fallbackReason: string | null }) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(() => fallbackReason != null || issues.some((i) => i.severity !== "INFO"))
   const warnings = issues.filter((i) => i.severity !== "INFO").length + (fallbackReason ? 1 : 0)
-  const shown = open ? issues : issues.slice(0, 3)
+  const shown = open ? issues : []
   const total = issues.length + (fallbackReason ? 1 : 0)
   return (
     <Card className="gap-0 py-0">
@@ -67,14 +68,14 @@ export function IssuesList({ issues, fallbackReason }: { issues: Issue[]; fallba
             </span>
             {warnings > 0 && <span className="text-muted-foreground">({warnings} need attention)</span>}
           </div>
-          {issues.length > 3 && (
+          {total > 0 && (
             <Button size="sm" variant="ghost" className="text-xs" aria-expanded={open} onClick={() => setOpen(!open)}>
-              {open ? "Show fewer" : `Show all ${issues.length}`}
+              {open ? "Hide" : "Show"}
               <ChevronDownIcon className={cn("transition-transform", open && "rotate-180")} />
             </Button>
           )}
         </div>
-        {(issues.length > 0 || fallbackReason) && (
+        {open && (
           <ul className="divide-y border-t">
             {fallbackReason && (
               <IssueRow severity="WARNING" code="FALLBACK_MODEL" message={`Fallback model in use: ${fallbackReason}`} />

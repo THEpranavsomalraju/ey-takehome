@@ -84,6 +84,28 @@ CHARTS: dict[str, ChartSpec] = {
         ("eda/cramers_v.csv", "eda/mutual_information.csv"),
         ("variable", "label", "mutual_information_nats"),
     ),
+    "missing-values": ChartSpec(
+        "Missing values",
+        "Training lines with an empty cell, per input column.",
+        ("eda/missing_values.csv",),
+        ("column", "missing_rows", "missing_share"),
+    ),
+    "amount-distribution": ChartSpec(
+        "Amounts and outliers",
+        "Amount statistics overall and per category (training lines); amounts are shown on a "
+        "signed log scale and outliers beyond 1.5 times the interquartile range are kept.",
+        ("eda/amount_summary.csv", "eda/amount_by_class.csv"),
+    ),
+    "label-cleanup": ChartSpec(
+        "Label cleanup",
+        "Raw spellings in the label column and the category each maps to, with line counts.",
+        ("eda/raw_label_mapping.csv",),
+    ),
+    "before-after": ChartSpec(
+        "Before and after preprocessing",
+        "Sample training lines at three stages: raw cell, cleaned value, and model input.",
+        ("preprocessing/before_after_samples.csv",),
+    ),
     "category-profiles": ChartSpec(
         "What each category looks like",
         "Profile of each anonymized category in the training rows: size, top vendor and GL "

@@ -10,15 +10,15 @@ import { GLOSSARY } from "@/lib/glossary"
 const STEPS = [
   {
     title: "Data & Model tab",
-    text: "How the model was built and how far to trust it: the data, honest testing, the model comparison, confidence and review, and the final check on 590 unseen lines. Read it top to bottom; each panel ends with its takeaway.",
+    text: "How the model was built and how far to trust it: the data, cleaning, testing, the model comparison, confidence and review, and the final check on 590 unseen lines.",
   },
   {
     title: "Classify & Explain tab",
-    text: "Try it: upload an Excel or CSV ledger, or click \"Use the holdout sample\". Every line gets a category, a confidence, and a review decision.",
+    text: "Try it: upload an Excel or CSV ledger, or click \"Use the holdout sample\". Each line gets a category, a confidence, and a review decision.",
   },
   {
-    title: "Click any row",
-    text: "See exactly why it got its category, which past invoices support it, and what a reviewer should check. \"Explain with AI\" asks Claude for a plain-language explanation; \"What if?\" re-scores the line with one input changed.",
+    title: "Explain a row",
+    text: "Click Explain on a row to see why it got its category and which past invoices support it. The AI writes a short explanation; \"What if?\" re-scores the line with one input changed.",
   },
 ]
 
@@ -35,7 +35,7 @@ export function GuideSheet() {
       <SheetContent className="w-full gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-2xl">
         <SheetHeader className="border-b px-6 py-4">
           <SheetTitle>Guide</SheetTitle>
-          <SheetDescription>What this tool does and how to read it, for a first visit.</SheetDescription>
+          <SheetDescription>What this tool does and how to use it.</SheetDescription>
         </SheetHeader>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="space-y-6 px-6 py-5 text-sm">
