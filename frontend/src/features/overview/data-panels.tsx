@@ -19,6 +19,7 @@ export function ClassDistributionPanel() {
   return (
     <Panel
       title="Category balance"
+      explain={{ chart: "category-balance", view: `${scale} scale` }}
       description="How many past invoice lines carry each category (training rows only)."
       why={<>It shows how lopsided the data is. A lazy model that always answers Category_1 would already look 88% accurate while never finding a rare category, so models are also judged on <Term name="macro F1" />.</>}
       action={
@@ -102,6 +103,7 @@ export function MonthlyVolumePanel() {
   return (
     <Panel
       title="When each category occurs"
+      explain={{ chart: "monthly-volume", view: view === "rare" ? "Rare categories only" : "All categories" }}
       description={view === "rare" ? "Invoice lines per posting month for the four rare categories (months without one are left out)." : "Invoice lines per posting month, coloured by category."}
       why={<>If a category depends on timing, the posting month is a useful input, and the model must also be tested on later months (the <Term name="out-of-time" />).</>}
       action={
@@ -180,6 +182,7 @@ export function SignalPanel() {
   return (
     <Panel
       title="Which inputs carry the label"
+      explain={{ chart: "input-signal", view: measure === "cramer" ? "Cramer's V" : "Mutual information" }}
       description={
         measure === "cramer" ? (
           <>How strongly each input is linked to the category, as <Term name="Cramer's V" />: 0 = no link, 1 = the input decides the category.</>

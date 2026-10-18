@@ -78,6 +78,7 @@ export function ConfusionPanel() {
   return (
     <Panel
       title="Where the model is right and wrong"
+      explain={{ chart: "confusion", view: source === "holdout" ? "Holdout" : "Cross-validation" }}
       description="Each row is the true category, each column what the model chose. The diagonal is correct; anything off it is a mistake. Darker means a larger share of that row."
       why="It shows which mistakes the model makes, not just how many, so reviewers know what to watch for."
       action={
@@ -129,6 +130,7 @@ export function PerClassPanel() {
   return (
     <Panel
       title="Quality per category"
+      explain={{ chart: "per-class" }}
       description={<><Term name="recall">Recall</Term>: how many of a category's lines the model finds. <Term name="precision">Precision</Term>: how often its picks for that category are right.</>}
       why="The overall score is dominated by Category_1; this shows each category on its own, including the rare ones."
       takeaway="Category_1 is near perfect and Category_2 is found about 8 times in 10. Rare categories have 2 to 20 training rows, so their scores move a lot with each row; those predictions are best confirmed by a person."

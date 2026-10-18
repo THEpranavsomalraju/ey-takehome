@@ -436,3 +436,11 @@ Status: Accepted (CI matrix findings)
 Decision: all text files are written with LF line endings; `.gitattributes` disables line-ending conversion; the split hash ignores CRLF; the holdout workbooks are stored uncompressed with a fixed zip creator field. Compressed bytes depend on the zlib build (Python 3.14 on Windows ships zlib-ng).
 
 Evidence: GitHub Actions: 12 of 12 OS and Python cells plus the fallback job green. The canary (unpinned latest libraries) passes 496 of 497; the remaining failure is the split record, which notes exact library versions by design.
+
+## D41. AI explanations of the dashboard's charts
+
+Status: Accepted (owner request, 2026-10-17)
+
+Decision: every chart has an Explain button. The server (`ledgerclf/chart_explainer.py`) builds the request only from the chart's own report files, or from the upload's summary for the three upload charts, with precomputed totals. It asks Claude in one call with no tools, and checks every cited number against that data (or the same number times 100, or a whole number up to 12). Answers that fail the check, or arrive with no Claude available, fall back to the chart's built-in "why it matters" and "finding" text. Claude answers are cached in memory per chart, view and upload. The relay accepts this second request type only with its own system prompt (hash checked) and no tools.
+
+Evidence: tests/integration/test_chart_explainer.py; a live run through the relay answered 15 of 18 charts with Claude before the upload shares were added and all three upload charts after. The remaining fallbacks were numbers Claude computed itself, which the check rejects as designed.

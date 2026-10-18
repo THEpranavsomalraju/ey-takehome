@@ -287,6 +287,10 @@ class AgentParams:
     relay_token: str = "69ffdcce74916b566ca3c2004eeab862"
     percent_tolerance: float = 1.0
     relative_tolerance: float = 0.001  # a cited number may differ from its source by 0.1%
+    chart_max_rows: int = 60  # rows of a report sent to Claude when explaining a chart
+    max_view_chars: int = 120  # length of the "current view" text from the dashboard
+    chart_cache_size: int = 128  # Claude chart answers kept in memory
+    chart_free_integers: int = 12  # whole numbers up to this may be cited without a source
 
 
 @dataclass(frozen=True)

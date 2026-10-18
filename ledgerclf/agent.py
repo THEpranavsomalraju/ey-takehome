@@ -153,7 +153,8 @@ def _use_system_certificates() -> None:
         logger.debug("truststore not installed; using bundled certificates")
 
 
-def _client(connection: ClaudeConnection, params: AgentParams) -> Any:
+def make_client(connection: ClaudeConnection, params: AgentParams) -> Any:
+    """Return an Anthropic client for a connection (direct key or relay)."""
     _use_system_certificates()
     import anthropic
 
@@ -195,7 +196,7 @@ def explain_with_agent(
     if use_llm:
         if client is None:
             connection = resolve_connection(service.settings, override_key)
-            client = _client(connection, params) if connection is not None else None
+            client = make_client(connection, params) if connection is not None else None
         if client is None:
             reason = "No API key or relay configured."
         else:
@@ -217,10 +218,10 @@ def _claude_answer(
         return None, failure.message
     except Exception as error:  # boundary: any client or network failure falls back
         logger.debug("Claude engine failed", exc_info=True)
-        return None, _failure_reason(error)
+        return None, failure_reason(error)
 
 
-def _failure_reason(error: Exception) -> str:
+def failure_reason(error: Exception) -> str:
     """Name network and API errors as unreachable; anything else as an engine failure."""
     name = type(error).__name__
     from_client = type(error).__module__.split(".")[0] in ("anthropic", "httpx")

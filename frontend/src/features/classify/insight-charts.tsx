@@ -6,10 +6,12 @@ import type { Insights } from "@/lib/api"
 import { CLASS_COLORS, flagLabel, num, pct } from "@/lib/domain"
 
 export function PredictedClassesChart({
+  uploadId,
   insights,
   selected,
   onSelect,
 }: {
+  uploadId: string
   insights: Insights
   selected: string | null
   onSelect: (label: string | null) => void
@@ -18,6 +20,7 @@ export function PredictedClassesChart({
   return (
     <Panel
       title="Predicted categories"
+      explain={{ chart: "upload-categories", uploadId }}
       description="How many lines in this file went to each category. Click a bar to show only those lines in the table."
       why="A quick check that the mix looks sensible for the ledger you uploaded."
     >
@@ -64,13 +67,14 @@ export function PredictedClassesChart({
   )
 }
 
-export function ConfidenceChart({ insights }: { insights: Insights }) {
+export function ConfidenceChart({ uploadId, insights }: { uploadId: string; insights: Insights }) {
   const data = insights.confidence_histogram
     .filter((b) => b.high > 0.15)
     .map((b) => ({ ...b, bin: b.low + (b.high - b.low) / 2 }))
   return (
     <Panel
       title="How confident the model is"
+      explain={{ chart: "upload-confidence", uploadId }}
       description={`How sure the model is across this file: lines per confidence level, automatic and review side by side (square-root scale, dashed line = ${pct(insights.threshold, 0)} threshold).`}
       why="It shows how much of the file can be trusted automatically and how much needs a person."
     >
@@ -121,10 +125,12 @@ export function ConfidenceChart({ insights }: { insights: Insights }) {
 }
 
 export function FlagsChart({
+  uploadId,
   insights,
   selected,
   onSelect,
 }: {
+  uploadId: string
   insights: Insights
   selected: string | null
   onSelect: (flag: string | null) => void
@@ -133,6 +139,7 @@ export function FlagsChart({
   return (
     <Panel
       title="Warnings raised"
+      explain={{ chart: "upload-warnings", uploadId }}
       description="Which warnings fired in this file and how often. Click a bar to show only those lines."
       why="It points reviewers to the lines with new vendors, new accounts, or low confidence first."
     >

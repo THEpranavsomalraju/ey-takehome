@@ -27,6 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from ledgerclf import __version__
 from ledgerclf.agent import explain_with_agent, resolve_connection
 from ledgerclf.agent_tools import ToolContext, run_tool
+from ledgerclf.chart_explainer import ChartAnswerCache, explain_chart
 from ledgerclf.config import HOLDOUT_FEATURES_STEM
 from ledgerclf.exceptions import ArtifactError, ConfigError, LedgerClfError
 from ledgerclf.jsonsafe import to_jsonable
@@ -86,6 +87,16 @@ class WhatIfRequest(BaseModel):
     row_number: int = Field(ge=1)
     column: str
     value: str = Field(max_length=1000)
+
+
+class ChartExplainRequest(BaseModel):
+    """Body of POST /api/explain-chart."""
+
+    chart: str = Field(max_length=64)
+    view: str = Field(default="", max_length=500)
+    upload_id: str | None = None
+    use_llm: bool = True
+    api_key: str | None = None
 
 
 class ExplainRequest(BaseModel):
@@ -246,6 +257,21 @@ def _add_prediction_routes(app: FastAPI, service: PredictionService, cache: Resu
     def what_if_route(request: WhatIfRequest) -> dict[str, Any]:
         context = ToolContext(service, cache.get(request.upload_id), request.row_number)
         return run_tool(context, "what_if", {"column": request.column, "value": request.value})
+
+    chart_cache = ChartAnswerCache(service.settings.agent.chart_cache_size)
+
+    @app.post("/api/explain-chart")
+    def explain_chart_route(request: ChartExplainRequest) -> dict[str, Any]:
+        result = cache.get(request.upload_id) if request.upload_id else None
+        key = (request.chart, " ".join(request.view.split()), request.upload_id or "")
+        cached = chart_cache.get(key) if request.use_llm else None
+        if cached is not None:
+            return cached.to_dict() | {"cached": True}
+        answer = explain_chart(
+            service, request.chart, request.view, result, request.use_llm, request.api_key
+        )
+        chart_cache.put(key, answer)
+        return answer.to_dict() | {"cached": False}
 
     @app.post("/api/explain")
     def explain(request: ExplainRequest) -> dict[str, Any]:

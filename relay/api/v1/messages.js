@@ -2,8 +2,9 @@
 //
 // The local app calls this endpoint instead of api.anthropic.com, so graders need no API
 // key and the author's key never leaves Vercel. The relay only accepts requests
-// shaped like the agent's: a fixed model, a capped output length, exactly the agent's four
-// tools, and the agent's own system prompt (checked by hash). Any other field is dropped.
+// shaped like the dashboard's two uses: the row agent (exactly its four tools and its system
+// prompt) or the chart explainer (no tools and its own system prompt). Prompts are checked by
+// hash, the model and output length are fixed, and any other field is dropped.
 import { createHash } from "node:crypto";
 
 const UPSTREAM = "https://api.anthropic.com/v1/messages";
@@ -17,8 +18,10 @@ const ALLOWED_TOOLS = new Set([
   "find_similar_training_rows",
   "what_if",
 ]);
-// sha256 of ledgerclf.agent.SYSTEM_PROMPT; tests/integration/test_agent_and_server.py keeps it in sync.
+// sha256 of ledgerclf.agent.SYSTEM_PROMPT and ledgerclf.chart_explainer.CHART_SYSTEM_PROMPT;
+// tests/integration/test_agent_and_server.py keeps both in sync.
 const SYSTEM_PROMPT_SHA256 = "b3f27101d827a60f8c5604222bf2780230e7e6a309e4b4fb7527bb8636ccac11";
+const CHART_PROMPT_SHA256 = "23dd3251eb8c266f37ffaf04a3b48fcd9d30408c49581f6e0de951b9ea4d4d42";
 const ALLOWED_EFFORT = "low";
 const RATE_LIMIT_PER_MINUTE = 40;
 const recentRequests = new Map(); // per instance, best effort
@@ -41,14 +44,16 @@ function validate(body) {
   if (!Array.isArray(body.messages) || body.messages.length > MAX_MESSAGES) {
     return "Too many messages.";
   }
+  if (typeof body.system !== "string") return "Missing system prompt.";
+  const hash = createHash("sha256").update(body.system, "utf8").digest("hex");
   const names = Array.isArray(body.tools) ? body.tools.map((tool) => tool && tool.name) : [];
+  if (names.length === 0) {
+    return hash === CHART_PROMPT_SHA256 ? null : "Unknown system prompt.";
+  }
   if (names.length !== ALLOWED_TOOLS.size || names.some((name) => !ALLOWED_TOOLS.has(name))) {
     return "Requests must carry exactly the agent's tools.";
   }
-  if (typeof body.system !== "string") return "Missing system prompt.";
-  const hash = createHash("sha256").update(body.system, "utf8").digest("hex");
-  if (hash !== SYSTEM_PROMPT_SHA256) return "Unknown system prompt.";
-  return null;
+  return hash === SYSTEM_PROMPT_SHA256 ? null : "Unknown system prompt.";
 }
 
 export default async function handler(req, res) {
@@ -67,10 +72,10 @@ export default async function handler(req, res) {
     model: ALLOWED_MODEL,
     max_tokens: Math.min(Number(req.body.max_tokens) || MAX_OUTPUT_TOKENS, MAX_OUTPUT_TOKENS),
     system: req.body.system,
-    tools: req.body.tools,
     messages: req.body.messages,
     output_config: { effort: ALLOWED_EFFORT },
   };
+  if (Array.isArray(req.body.tools) && req.body.tools.length) body.tools = req.body.tools;
   const headers = {
     "content-type": "application/json",
     "x-api-key": process.env.ANTHROPIC_API_KEY || "",

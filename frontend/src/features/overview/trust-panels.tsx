@@ -41,6 +41,7 @@ export function CalibrationPanel() {
   return (
     <Panel
       title="Does 90% confident mean 90% right?"
+      explain={{ chart: "calibration", view: stage === "both" ? "Raw and calibrated" : stage === "before" ? "Raw" : "Calibrated" }}
       description={<>Across: how sure the model said it was. Up: how often it was actually right. Points on the dashed line are perfectly honest (<Term name="calibration" />).</>}
       why="Review decisions rely on confidence. If 90% did not mean 90%, sending work to people by confidence would be unreliable."
       action={
@@ -157,6 +158,7 @@ export function ThresholdPanel() {
   return (
     <Panel
       title="Review threshold explorer"
+      explain={{ chart: "review-threshold", view: current ? `Threshold ${current.threshold.toFixed(2)} selected` : "" }}
       description={<>Drag the slider to choose the <Term name="review threshold" />: lines below it go to a person. Figures are from cross-validation on 5,309 lines.</>}
       why="It shows the business trade-off directly: more automation, or higher accuracy on the lines the model decides alone."
       takeaway={
@@ -287,6 +289,7 @@ export function FlagReliabilityPanel() {
   return (
     <Panel
       title="How reliable is each warning?"
+      explain={{ chart: "warning-reliability", view: source === "oof" ? "Cross-validation" : "Holdout" }}
       description="How accurate the model is on the lines that carry each warning. Warnings marked review send the line to a person."
       why="It shows that the warnings mean something: flagged lines really are riskier, so reviewing them catches mistakes."
       action={

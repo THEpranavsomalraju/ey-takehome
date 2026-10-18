@@ -161,6 +161,15 @@ export interface AgentAnswer {
   seconds: number
 }
 
+export interface ChartAnswer {
+  text: string | null
+  engine: "claude" | "offline"
+  model: string | null
+  fallback_reason: string | null
+  seconds: number
+  cached: boolean
+}
+
 export interface WhatIfResult {
   changed: { column: string; value: string }
   original_prediction: { label: string; probability: number }
@@ -267,6 +276,14 @@ export const api = {
     }),
   whatIf: (uploadId: string, row: number, column: string, value: string) =>
     post<WhatIfResult>("/api/whatif", { upload_id: uploadId, row_number: row, column, value }),
+  explainChart: (chart: string, view: string, uploadId: string | null, useLlm: boolean, apiKey: string | null) =>
+    post<ChartAnswer>("/api/explain-chart", {
+      chart,
+      view,
+      upload_id: uploadId,
+      use_llm: useLlm,
+      api_key: apiKey || null,
+    }),
   downloadUrl: (uploadId: string) => `/api/predict/${uploadId}/download`,
   sampleUrl: "/api/sample/holdout",
 }

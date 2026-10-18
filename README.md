@@ -64,6 +64,7 @@ The API documentation is at http://127.0.0.1:8000/docs while the server runs.
 
 - **Data & Model** is the story, section by section: category balance, when categories occur, which inputs carry the label, why testing is grouped, the model comparison, what each input is worth, class weights, calibration, an interactive review-threshold explorer, warning reliability, the holdout result, and the feature pipeline. Most charts have a control to switch what they show, and every panel ends with a one-line takeaway.
 - **Classify & Explain** takes any Excel or CSV upload (or the holdout sample). It shows validation messages, accuracy if the file has labels, and charts that filter the table when clicked. The table can be searched, filtered, and sorted, with 25 rows per page. Clicking a row opens its explanation: what drove the prediction (exact contributions), the probability of each category, evidence from past invoices, warnings, an on-demand AI explanation, and a **What if?** box that re-scores the row with one input changed.
+- **Every chart has an Explain button.** Claude explains the chart in plain language from the chart's own data: what you are looking at, what the numbers say, and why it matters, with a short technical note. Every number it quotes is checked against that data. Without Claude, the chart's built-in summary is shown. Answers are cached, so a repeat click costs nothing.
 - The header shows the active model (click for details and an environment check), the agent route, and settings for an optional personal API key.
 
 The built dashboard ships in `frontend/dist`, so no Node.js is needed. To change and rebuild it: `cd frontend`, `npm ci`, `npm run build` (Node 20 or newer).
@@ -142,6 +143,7 @@ ledgerclf/        the Python package
   flags, reference, overlap        review flags and training-history evidence
   service, server, table_views     the facade used by the dashboard, the HTTP API, table pages
   agent, agent_tools               the Claude explanation agent and its read-only tools
+  chart_explainer                  grounded AI explanations of the dashboard's charts
   cli                              python -m ledgerclf ...
 frontend/         the dashboard: React + shadcn/ui source, built files in frontend/dist
 notebooks/        01 exploration, 02 preprocessing, 03 modeling

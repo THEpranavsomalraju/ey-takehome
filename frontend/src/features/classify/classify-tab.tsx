@@ -100,12 +100,13 @@ export function ClassifyTab() {
 
       <div className="grid gap-4 lg:grid-cols-3">
         <PredictedClassesChart
+          uploadId={upload.upload_id}
           insights={insights}
           selected={query.label}
           onSelect={(label) => setQuery({ ...query, label })}
         />
-        <ConfidenceChart insights={insights} />
-        <FlagsChart insights={insights} selected={query.flag} onSelect={(flag) => setQuery({ ...query, flag })} />
+        <ConfidenceChart uploadId={upload.upload_id} insights={insights} />
+        <FlagsChart uploadId={upload.upload_id} insights={insights} selected={query.flag} onSelect={(flag) => setQuery({ ...query, flag })} />
       </div>
 
       <ResultsTable

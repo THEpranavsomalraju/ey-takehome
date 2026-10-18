@@ -91,6 +91,7 @@ export function OverviewTab() {
           </div>
           <Panel
             title="What each category looks like"
+            explain={{ chart: "category-profiles" }}
             description={CATEGORY_CAVEAT}
             why="The category names are hidden, so these profiles are the best description of what the model is choosing between. Hover a category anywhere in the Classify tab to see its profile."
           >
@@ -100,6 +101,7 @@ export function OverviewTab() {
             <SignalPanel />
             <Panel
               title="Repeated rows"
+              explain={{ chart: "repeated-rows" }}
               description="Invoice lines that are exact copies of an earlier line, apart from the invoice number."
               why="If one copy is used for training and another for testing, the test is too easy. This is why every test keeps copies together."
               takeaway="A quarter of the rows repeat an earlier row exactly, and copies almost always share a label. The model can learn these patterns, but testing must keep copies apart (next section)."

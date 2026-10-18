@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { CLASS_COLORS, shortClass } from "@/lib/domain"
+import { ExplainChart, type ExplainTarget } from "@/components/explain-chart"
 import { cn } from "@/lib/utils"
 
 /** A titled card holding one chart or table, with an optional control and takeaway. */
@@ -15,6 +16,7 @@ export function Panel({
   why,
   action,
   takeaway,
+  explain,
   children,
   className,
 }: {
@@ -26,6 +28,8 @@ export function Panel({
   action?: ReactNode
   /** What the data in the chart tells us. */
   takeaway?: ReactNode
+  /** Adds an "Explain" button that asks the AI about this chart. */
+  explain?: ExplainTarget
   children: ReactNode
   className?: string
 }) {
@@ -34,7 +38,22 @@ export function Panel({
       <CardHeader>
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         {description && <CardDescription className="text-xs">{description}</CardDescription>}
-        {action && <CardAction>{action}</CardAction>}
+        {(action || explain) && (
+          <CardAction className="flex flex-wrap items-center justify-end gap-2">
+            {action}
+            {explain && (
+              <ExplainChart
+                target={explain}
+                fallback={
+                  <>
+                    {why && <p><span className="font-medium">Why it matters: </span>{why}</p>}
+                    {takeaway && <p><span className="font-medium">Finding: </span>{takeaway}</p>}
+                  </>
+                }
+              />
+            )}
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-3">
         {children}

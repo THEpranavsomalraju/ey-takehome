@@ -419,8 +419,13 @@ def test_relay_accepts_exactly_the_agent_system_prompt():
     relay = (
         Path(agent_module.__file__).resolve().parent.parent / "relay" / "api" / "v1" / "messages.js"
     )
+    from ledgerclf.chart_explainer import CHART_SYSTEM_PROMPT
+
+    source = relay.read_text(encoding="utf-8")
     digest = hashlib.sha256(agent_module.SYSTEM_PROMPT.encode("utf-8")).hexdigest()
-    assert f'SYSTEM_PROMPT_SHA256 = "{digest}"' in relay.read_text(encoding="utf-8")
+    assert f'SYSTEM_PROMPT_SHA256 = "{digest}"' in source
+    chart_digest = hashlib.sha256(CHART_SYSTEM_PROMPT.encode("utf-8")).hexdigest()
+    assert f'CHART_PROMPT_SHA256 = "{chart_digest}"' in source
 
 
 def test_download_neutralizes_spreadsheet_formulas(api):

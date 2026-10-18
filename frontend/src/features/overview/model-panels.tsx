@@ -52,6 +52,7 @@ export function ValidationPanel() {
   return (
     <Panel
       title="How the score depends on the test design"
+      explain={{ chart: "test-design", view: `Model: ${modelLabel(model)}` }}
       description="The same model's accuracy under four different ways of testing it."
       why={<>A score is only as honest as the test behind it. This shows how much a careless random test would flatter the model, and how it holds up on new vendors and later months. The one we report is <Term name="grouped cross-validation" />.</>}
       action={
@@ -111,6 +112,7 @@ export function LeaderboardPanel() {
   return (
     <Panel
       title="Model comparison"
+      explain={{ chart: "model-comparison", view: metric === "recall" ? `Recall for ${rareClass}` : metric === "accuracy" ? "Accuracy" : "Macro F1" }}
       description={<>Each candidate model's score on identical tests. The dot is the average; the line shows how much it varies between test runs. Switch between <Term name="accuracy" />, <Term name="macro F1" />, and <Term name="recall" /> for one category.</>}
       why={<>It shows that the chosen model (highlighted) wins fairly against simple rules and other approaches, not just against the <Term name="baseline" />.</>}
       action={
@@ -191,6 +193,7 @@ export function AblationPanel() {
   return (
     <Panel
       title="What each input is worth"
+      explain={{ chart: "ablation", view: metric === "delta_accuracy" ? "Change in accuracy" : "Change in macro F1" }}
       description={<>How much the score changes when one group of inputs is taken away (or added). This is an <Term name="ablation" />, run with the logistic model.</>}
       why="It tells us which information the model really relies on, so useful inputs are kept and noise is left out."
       action={
@@ -275,6 +278,7 @@ export function ClassWeightPanel() {
   return (
     <Panel
       title="Class weights: rare-category recall against false alarms"
+      explain={{ chart: "class-weights", view: metric === "cv_macro_f1_5" ? "Macro F1" : metric === "cv_accuracy" ? "Accuracy" : "False rare alarms" }}
       description={<>Scores as the model is told to pay more attention to rare categories (<Term name="class weights" />): 0 = no extra attention, 1 = every category weighted equally.</>}
       why="It shows the trade-off that was tuned: finding rare categories without raising false alarms on ordinary invoices."
       action={
