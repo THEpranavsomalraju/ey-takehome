@@ -60,7 +60,7 @@ addopts = "--strict-markers -p no:cacheprovider"
 timeout = 120
 markers = [
     "slow: training-heavy tests, excluded from the fast gate",
-    "edge: edge-case catalog tests (docs/05 section 4)",
+    "edge: edge-case catalog tests",
     "portability: static and subprocess portability checks",
     "golden: comparisons against golden prediction files",
 ]

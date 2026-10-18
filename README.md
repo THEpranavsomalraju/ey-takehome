@@ -40,7 +40,7 @@ Features are TF-IDF words for each text column, indicators for recurring vendors
 
 The model is a blend of logistic regression and LightGBM, averaged in log-odds and then temperature-calibrated. Both parts are additive, so each prediction breaks down into per-input contributions, which is what the explanations show.
 
-I set aside 10% of the data before looking at anything and scored it once at the end. Everything else used grouped cross-validation: about a quarter of the rows are copies of other rows, and a random split would have tested the model on rows it had already seen (it inflates accuracy by about 1.4 points).
+I set aside 10% of the data before looking at anything and scored it once at the end. Everything else used grouped cross-validation: about a quarter of the training rows (25.7%) match another row on everything except the invoice number, and a random split would have tested the model on rows it had effectively already seen (it inflates accuracy by about 1.4 points).
 
 Lines under 80% confidence, or with a critical warning such as a new vendor or GL account, go to review. They still get a prediction.
 

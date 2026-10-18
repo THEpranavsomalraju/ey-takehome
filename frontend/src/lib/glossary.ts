@@ -24,7 +24,7 @@ export const GLOSSARY = {
   "grouped cross-validation": {
     term: "Grouped cross-validation",
     definition:
-      "Cross-validation where exact copies of a row always land in the same part. Without it, the model would be tested on rows it had already seen in training, and the score would look better than it is.",
+      "Cross-validation where rows that match on every model input (the invoice number is not one) always land in the same part. Without it, the model would be tested on rows it had already seen in training, and the score would look better than it is.",
   },
   "out-of-time": {
     term: "Out-of-time test",

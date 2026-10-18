@@ -255,7 +255,7 @@ export function DuplicateStats() {
         label="Rows that repeat an earlier row"
         value={pct(d.duplicate_rows_group_key / d.rows, 0)}
         detail={`${num(d.duplicate_rows_group_key)} of ${num(d.rows)} training rows`}
-        hint="Identical to an earlier row on every model input except the invoice number. A random split would test the model on copies of training rows."
+        hint="Identical to an earlier row on every model input except the invoice number. A random split would test the model on rows it had effectively seen in training."
       />
       <Stat
         label="Rows in a group with copies"
@@ -266,7 +266,7 @@ export function DuplicateStats() {
       <Stat
         label="Groups with conflicting labels"
         value={num(d.label_conflict_groups)}
-        detail={d.label_conflict_groups <= 1 ? "Copies almost always share a label" : "Some copies disagree on the label"}
+        detail={d.label_conflict_groups <= 1 ? "Matching rows almost always share a label" : "Some matching rows disagree on the label"}
       />
       <Stat
         label="Best possible accuracy"

@@ -98,10 +98,10 @@ export function OverviewTab() {
             <SignalPanel />
             <Panel
               title="Repeated rows"
-              description="Lines that are exact copies of an earlier line, apart from the invoice number."
-              why="Copies split across training and test would make the test too easy, so every test keeps them together."
+              description="Lines that match an earlier line on every input except the invoice number."
+              why="Matching lines split across training and test would make the test too easy, so every test keeps them together."
               explain={{ chart: "repeated-rows" }}
-              takeaway="A quarter of the lines repeat an earlier line, and copies almost always share a label."
+              takeaway="A quarter of the lines match an earlier line apart from the invoice number (12% are exact repeats), and matching lines almost always share a label."
             >
               <DuplicateStats />
             </Panel>
@@ -134,7 +134,7 @@ export function OverviewTab() {
           id="split"
           eyebrow="3. Split and testing"
           title="A 10% holdout, then grouped cross-validation"
-          description="590 lines (10%) were set aside first and scored once at the end. All development used the other 5,309 lines with grouped folds: copies of a line stay on the same side of a split, and every preprocessing step is fitted inside each training fold."
+          description="590 lines (10%) were set aside first and scored once at the end. All development used the other 5,309 lines with grouped folds: lines that match on every input except the invoice number stay on the same side of a split, and every preprocessing step is fitted inside each training fold."
         >
           <ValidationPanel />
         </Section>

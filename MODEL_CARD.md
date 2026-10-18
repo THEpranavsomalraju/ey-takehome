@@ -38,7 +38,7 @@ A first pass for a reviewer. Each line gets a category, a calibrated confidence,
 | Holdout macro F1 | 0.7068 | 0.6880 | |
 | Holdout calibration error | 0.011 | 0.023 | |
 
-A random split would report 0.964 for the logistic model against 0.949 with grouped folds: the 1.4 points are copies of test rows leaking into training. On vendors never seen in training, accuracy is 0.913.
+A random split would report 0.964 for the logistic model against 0.949 with grouped folds: the 1.4 points come from rows matching the test rows leaking into training. On vendors never seen in training, accuracy is 0.913.
 
 | Category | Training lines | Holdout lines | Holdout recall | Holdout precision | CV recall |
 |---|---|---|---|---|---|

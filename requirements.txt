@@ -1,4 +1,4 @@
-# Runtime dependencies. Exact pins chosen per docs/05 section 5.2:
+# Runtime dependencies, pinned to exact versions:
 # released at least 3 months before the build (2026-10-17), with binary wheels
 # for CPython 3.11 to 3.14 on Windows x64, macOS arm64 and x86_64, Linux x86_64.
 # Verified by: python tools/check_wheels.py

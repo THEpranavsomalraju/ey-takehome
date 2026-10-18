@@ -60,7 +60,7 @@ export function ValidationPanel() {
       title="How the score depends on the test design"
       explain={{ chart: "test-design", view: `Model: ${modelLabel(model)}` }}
       description="The same model's accuracy under four different ways of testing it."
-      why={<>A random split puts copies of test lines into training. The figure reported everywhere else is <Term name="grouped cross-validation" />, computed here for three representative models.</>}
+      why={<>A random split puts lines matching the test lines into training. The figure reported everywhere else is <Term name="grouped cross-validation" />, computed here for three representative models.</>}
       action={
         <Select value={model} onValueChange={setModel}>
           <SelectTrigger size="sm" className="w-48 text-xs" aria-label="Model">
